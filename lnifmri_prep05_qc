@@ -1,0 +1,151 @@
+#!/bin/bash
+#
+# LNiF MRI Lab Pipeline for preprocessing of
+# structural and functional MRI dataset
+# stefano.tambalo@unitn.it - 20200310
+#
+# Generation of utility files and report for visual QC
+#
+########################################################################
+
+shopt -s extglob
+
+UsageFSL() {
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "\tFSLDIR not set!\n\n"
+    printf "\tRequires:\n\t\tFSL (https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL)\n"
+    printf "\n\n(c) stefano.tambalo@unitn.it, 2020.\n"
+    printf "***************************************************\n\n"
+    exit 1
+}
+
+Start() {
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "Build QC reports (registration, motion correction, power spectrum)\n"        
+}
+
+NextStep() {
+    printf "Complete. Exec. Time: ${exectime}"
+    printf "\n\n***************************************************\n\n"
+    exit 1
+}
+
+[ "$FSLDIR" = "" ] && UsageFSL
+exectime=0
+SECONDS=0
+pnglist=""
+QCDIR=`pwd`/qc
+#legend="fmp,tup,unc"
+
+Start
+
+for SUBDIR in sub-*[0-9] ; do
+	#printf "$SUBDIR\n"
+	fs="fmp,"
+	ts="tup,"
+	us="unc"
+
+	#Load EPI scan
+	for epiimg in `ls -d1 ${SUBDIR}/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz`; do
+	    
+		scanname=`basename ${epiimg}`
+		epiname=`$FSLDIR/bin/remove_ext ${epiimg}`
+		rot=${epiname}_rot.png
+		tra=${epiname}_tra.png
+
+		#Compose a single-subject motion report
+		if [ -f ${epiname}_motout.txt ]; then
+			mot=${epiname}_motout.png
+			printf -v str  "%s + 10 %s + 10 %s" "$mot" "$rot" "$tra" 
+			pnglist="$pnglist $str - 10 "
+		else
+			#Create an empty placeholder to keep consistent layout of report
+			printf "${SUBDIR}: Motion outliers not found! Preparing a placeholder\n"
+			k=`$FSLDIR/bin/fslval ${epiimg} dim4`
+			#printf '0\n%.0s' {1..$k} > $SUBDIR/func/placeholder_motout.txt
+			awk -v i=$k 'BEGIN { OFS="0\n"; $i="0"; print }' > $SUBDIR/func/placeholder_motout.txt
+		    $FSLDIR/bin/fsl_tsplot  -i $SUBDIR/func/placeholder_motout.txt \
+		                    	    -t 'Motion Outliers not detected' \
+        		                    -a out -w 640 -h 144 \
+                		            --ymin=0 --ymax=100 \
+                        	    	-o $SUBDIR/func/placeholder_motout.png;
+       		mot=$SUBDIR/func/placeholder_motout.png
+			printf -v str  "%s + 10 %s + 10 %s" "$mot" "$rot" "$tra" 
+			pnglist="$pnglist $str - 10 "
+		fi
+	done #for epiimg
+	#Prepare placeholder for powerspectrum in case some options are missing (FMP, TUP or both)
+	if [ ! -d $SUBDIR/func/sdc_fmp ]; then
+		fs="xxx,"
+		printf "${SUBDIR}: FMP power spectrum not found! Preparing a placeholder\n"
+		mkdir $SUBDIR/func/sdc_fmp_placeholder 
+		awk -v i=$d 'BEGIN { OFS="0\n"; $i="0"; print }' > $SUBDIR/func/sdc_fmp_placeholder/placeholder_spectrum.txt
+	fi
+	if [ ! -d $SUBDIR/func/sdc_tup ]; then
+		ts="xxx,"
+		printf "${SUBDIR}: TUP power spectrum not found! Preparing a placeholder\n"		
+		mkdir $SUBDIR/func/sdc_tup_placeholder 
+		awk -v i=$d 'BEGIN { OFS="0\n"; $i="0"; print }' > $SUBDIR/func/sdc_tup_placeholder/placeholder_spectrum.txt
+	fi
+	
+	#Compose label for charts
+	printf -v lbl "${fs}${ts}${us}"
+	
+	#Merge spectra files and plot a subject-wise overlay
+    paste -d " " `ls -d1 ${SUBDIR}/func/sdc_*/*_spectrum.txt` > $QCDIR/qc_${SUBDIR}_pspectra.txt
+	d=$(cat $QCDIR/qc_${SUBDIR}_pspectra.txt | wc -l )
+	nyq=$(echo "0.5/2/${d}" | bc -l)
+    
+	$FSLDIR/bin/fsl_tsplot  -i $QCDIR/qc_${SUBDIR}_pspectra.txt \
+							-u ${nyq} \
+ 							-y "Power" -x "Frequency (Hz)" \
+	                  	    -t "${SUBDIR} Power Spectra" \
+ 	   	                    -a ${lbl} -w 640 -h 144 \
+ 	   	                    --ymin=0 --ymax=500000 \
+ 	   	                    --start=1 --finish=3 \
+ 	       		            -o $QCDIR/qc_${SUBDIR}_pspectra.png;
+	
+	paste -d " " `ls -d1 ${SUBDIR}/func/*_motout.txt` > $QCDIR/qc_global_motout.txt
+done #for SUBDIR
+
+#Merge motion outliers temporal masks and plot a group report
+awk '{for(i=1;i<=NF;i++)x+=$i;print x;x=0}' $QCDIR/qc_global_motout.txt > $QCDIR/qc_sum_motout.txt
+$FSLDIR/bin/fsl_tsplot	-i $QCDIR/qc_sum_motout.txt\
+						-t 'Summary of Motion Outliers'\
+						-a sum -w 640 -h 144 \
+                        -o $QCDIR/qc_summary_motout.png;
+
+#Create final plot (motion)                       
+pnglist="$pnglist ${QCDIR}/qc_summary_motout.png"
+$FSLDIR/bin/pngappend ${pnglist} $QCDIR/lnifmri_prep_motion_QC.png
+#Create final plot (power spectrum)
+printf -v pspeclist "$( ls -d1 ${QCDIR}/*pspectra.png | sed ':a;N;$!ba;s/\n/ - 10 /g' )"
+$FSLDIR/bin/pngappend ${pspeclist} $QCDIR/lnifmri_prep_pspec_QC.png
+
+#Create filelist for group-ICA in MNI space
+ls -d1 `pwd`/sub*/func/sdc_fmp/*MNI-smooth.nii.gz > $QCDIR/filelist-fmp-groupICA.txt
+ls -d1 `pwd`/sub*/func/sdc_tup/*MNI-smooth.nii.gz > $QCDIR/filelist-tup-groupICA.txt
+ls -d1 `pwd`/sub*/func/sdc_unc/*MNI-smooth.nii.gz > $QCDIR/filelist-unc-groupICA.txt
+
+#Create filelist for VBM
+ls -d1 `pwd`/sub*/anat/*t1_*rage*[0-9]_+([0-9]).nii.gz > $QCDIR/filelist-template-VBM.txt
+
+#Clean up subject folder
+for SUBDIR in sub-* ; do
+	mkdir -p ${SUBDIR}/func/lnifmri_prep_files
+	ls -d1 ${SUBDIR}/func/*.* > ${SUBDIR}/func/${SUBDIR}_filelist.txt
+	xargs mv -t ${SUBDIR}/func/lnifmri_prep_files/ < ${SUBDIR}/func/${SUBDIR}_filelist.txt
+done
+
+#Clean up QC folder 
+mkdir -p $QCDIR/lnifmri_prep_qcfiles
+mv $QCDIR/qc_*.txt $QCDIR/lnifmri_prep_qcfiles/
+mv $QCDIR/qc_*.png $QCDIR/lnifmri_prep_qcfiles/
+
+duration=$SECONDS
+printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."
+NextStep

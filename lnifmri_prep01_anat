@@ -1,0 +1,129 @@
+#!/bin/bash
+#
+# LNiF MRI Lab Pipeline for preprocessing of
+# structural and functional MRI dataset
+# stefano.tambalo@unitn.it - 20200310
+#
+# Preprocess structural data, e.g. T1 MPRAGE, MP2RAGE, MEMPRAGE, T2, ecc.
+#
+########################################################################
+
+shopt -s extglob
+Usage() {
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "\tFSLDIR not set!\n\n"
+    printf "\tRequires:\n\t\tFSL (https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL)\n"
+    printf "\n\n(c) stefano.tambalo@unitn.it, 2020.\n"
+    printf "***************************************************\n\n"
+    exit 1
+}
+
+Start() {
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "Process structural data\n"    
+
+}
+
+NextStep() {
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "Complete. Exec. Time: ${exectime}\nNow run lnifmri_prep02_preproc"
+    printf "\n\n***************************************************\n\n"
+    exit 1
+}
+
+[ "$FSLDIR" = "" ] && Usage
+exectime=0
+subcount=0
+SECONDS=0
+
+Start
+
+for SUBDIR in sub-* ; do
+	#Look for T1 or T2w images
+    for s in `$FSLDIR/bin/imglob $SUBDIR/anat/*t[12]_*[0-9]_+([0-9]).nii.gz`; do
+        struc=`basename $s`
+        strucname=`$FSLDIR/bin/remove_ext $struc`
+        
+        #Resample struc to speed up processing time
+        $FSLDIR/bin/fslmaths ${s} -subsamp2 ${s}_lores
+        
+        #Check to determine image type (T1/T2)
+        if [[ ${strucname} = *"_t2_"* ]] ;
+        	then 
+        		type="T2";
+				#Account for multiple strucural images: sub-XX_ses_YY
+        		printf -v LABEL -- "${SUBDIR}_ses-%02d_${type}w" "$(( ++subcount ))"
+   				printf "\n\tProcessing ${type}w: $struc\n\tStored in: ${LABEL}\n"
+        		#Call fsl_anat script (see online FSL reference for detailed description of output)
+        		#WARNING! linear and nonlinear registration to MNI is NOT available for T2 images!!
+        		$FSLDIR/bin/fsl_anat    -o ./$SUBDIR/${LABEL} \
+                		                --nocrop \
+                        		        --noreorient \
+                                		--nosubcortseg \
+                                		--noreg \
+                                		--nononlinreg \
+                                		-t ${type} \
+                                		-i ${s}_lores;
+        	else
+        		type="T1";
+				#Account for multiple strucural images: sub-XX_ses_YY
+        		printf -v LABEL -- "${SUBDIR}_ses-%02d_${type}w" "$(( ++subcount ))"
+   				printf "\n\tProcessing ${type}w: $struc\n\tStored in: ${LABEL}\n"        
+        		#Call fsl_anat script (see online FSL reference for detailed description of output)
+        		$FSLDIR/bin/fsl_anat    -o ./$SUBDIR/${LABEL} \
+                		                --nocrop \
+                        		        --noreorient \
+                                		--nosubcortseg \
+                                		-t ${type} \
+                                		-i ${s}_lores;        		
+        fi
+
+        #Prepare WM mask
+        $FSLDIR/bin/fslmaths    ./$SUBDIR/${LABEL}.anat/${type}_fast_pve_2.nii.gz \
+                                -thr 0.5 \
+                                -bin ./$SUBDIR/${LABEL}.anat/${type}_wmedge.nii.gz;
+        
+        #Prepare CSF msk            
+        $FSLDIR/bin/fslmaths    ./$SUBDIR/${LABEL}.anat/${type}_fast_pve_1.nii.gz \
+                                -thr 0.5 \
+                                -bin ./$SUBDIR/${LABEL}.anat/${type}_csfedge.nii.gz;
+
+        #Prepare GM mask
+        $FSLDIR/bin/fslmaths    ./$SUBDIR/${LABEL}.anat/${type}_fast_pve_0.nii.gz \
+                                -thr 0.5 \
+                                -bin ./$SUBDIR/${LABEL}.anat/${type}_gmedge.nii.gz;
+
+        # #################################################################################################
+        # Prepare anatomical reference
+        # ------------------ ALTERNATIVE VERSION -----------
+        # printf "\tRunning BET on T1w\n"
+        # struc=`$FSLDIR/bin/imglob *t1_*mprage*[0-9]_+([0-9]).nii.gz`
+        # strucname=`$FSLDIR/bin/remove_ext ${struc}`
+        # $FSLDIR/bin/flirt \
+        #   -in ${struc} \
+        #   -applyxfm \
+        #   -init /usr/local/fsl/etc/flirtsch/ident.mat \
+        #   -out ${strucname}_resampled.nii.gz \
+        #   -paddingsize 0.0 \
+        #   -interp nearestneighbour \
+        #   -ref $FSLDIR/data/standard/MNI152_T1_2mm;
+        # bstruc="${strucname}_brain"
+        # wmstruc="${strucname}_wmedge"
+        # $FSLDIR/bin/bet ${strucname}_resampled ${bstruc} -f 0.4 -g 0.1 -B
+        # $FSLDIR/bin/fast -B -I 10 -l 10 ${bstruc}
+        # $FSLDIR/bin/fslmaths ${bstruc}_pve_2.nii.gz -thr 0.5 -bin ${wmstruc}
+        # $FSLDIR/bin/flirt -in ${bstruc} -ref $FSLDIR/data/standard/MNI152_T1_2mm_brain.nii.gz -dof 12 -out T1toMNIlin.nii.gz -omat T1toMNIlin.mat
+        # $FSLDIR/bin/fnirt --in=${struc}_resampled --aff=T1toMNIlin.mat --config=T1_2_MNI152_2mm.cnf --iout=T1toMNInonlin.nii.gz --cout=T1toMNI_coef.nii.gz --fout=T1_to_MNI_nonlin_field.nii.gz
+    done
+done #for .sub
+
+duration=$SECONDS
+printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."
+
+NextStep
