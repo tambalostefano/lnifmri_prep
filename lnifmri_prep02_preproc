@@ -59,11 +59,12 @@ for SUBDIR in sub-*[0-9] ; do
 
         #Extract core parameters from JSON
         TR=$(cat ${epiname}.json | sed 's/.*"RepetitionTime": \(.*\),.*/\1/;t;d')
+
         #Store multiband slice timing extracted from JSON
         cat ${epiname}.json | \
         tr -d '\n\t' | \
         sed 's/.*"SliceTiming": \[\([^]]*\)\].*/\1/g' | \
-        sed 's/,/\n/g' > $SUBDIR/func/${scanname}_slicetiming.txt;
+        tr ',' '\n' > $SUBDIR/func/${scanname}_slicetiming.txt;
 
         #Next steps are self-explanatory
         printf "\tDiscarding first 10 vols\n"
