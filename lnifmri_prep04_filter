@@ -12,6 +12,7 @@
 # -   ICA (ncomp=40) [optional]
 #
 ########################################################################
+export LC_ALL=C
 
 shopt -s extglob
 UsageFSL() {

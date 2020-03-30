@@ -11,6 +11,7 @@
 # -   Detection of motion outliers for temporal masking
 #
 ########################################################################
+export LC_ALL=C
 
 shopt -s extglob
 Usage() {

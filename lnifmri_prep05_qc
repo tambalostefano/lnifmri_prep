@@ -7,6 +7,7 @@
 # Generation of utility files and report for visual QC
 #
 ########################################################################
+export LC_ALL=C
 
 shopt -s extglob
 

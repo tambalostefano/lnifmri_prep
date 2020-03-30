@@ -11,6 +11,7 @@
 # dcm2niix -f %f_%p_%i_%t_%s -b y -ba n -z y <FOLDER NAME>
 #
 ########################################################################
+export LC_ALL=C
 
 shopt -s extglob
 

@@ -5,6 +5,7 @@
 # stefano.tambalo@unitn.it - 20200310
 #
 ########################################################################
+export LC_ALL=C
 
 shopt -s extglob
 UsageFSL() {
