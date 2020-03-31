@@ -11,6 +11,7 @@
 # dcm2niix -f %f_%p_%i_%t_%s -b y -ba n -z y <FOLDER NAME>
 #
 ########################################################################
+export LC_ALL=C
 
 shopt -s extglob
 
@@ -86,12 +87,15 @@ for DCMDIR in `cat dcmlist.txt` ; do
     printf "${DCMDIR}: DICOM to NIFTI conversion\n"
     #check if current directory is an output dir from lnifmri_prep;
     #if not, run the DCM to NII conversion of image files
-    if [ ! -f ${DCMDIR}/lnifmri_prep_output.txt -a ! -f "${DCMDIR}/*.nii.gz" ]; then
-        dcm2niix -f %f_%p_%t_%s -b y -ba n -z y ${DCMDIR}
-        sleep 1
-        mv ${DCMDIR} ${DCMDIR}.sub
-    else
+    if [ -f ${DCMDIR}/lnifmri_prep_output.txt ]; then
+        
         printf "${DCMDIR}: not a raw DICOM folder.\n"
+    else
+
+    	dcm2niix -f %f_%p_%t_%s -b y -ba n -z y ${DCMDIR}
+        sleep 1
+		printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${default}" >> ${DCMDIR}/lnifmri_prep_output.txt
+        mv ${DCMDIR} ${DCMDIR}.sub
     fi
 done
 

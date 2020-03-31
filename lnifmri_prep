@@ -5,6 +5,7 @@
 # stefano.tambalo@unitn.it - 20200310
 #
 ########################################################################
+export LC_ALL=C
 
 shopt -s extglob
 UsageFSL() {
@@ -120,9 +121,10 @@ printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
 elapsed=$(echo $elapsed + $duration | bc)
 Progress
 
+cd ./${DIRNAME}
+
 SECONDS=0
 printf "Processing structural data\t"
-cd ./${DIRNAME}
 $LNIFMRIDIR/lnifmri_prep01_anat >> ${LOGDIR}/01_structural.txt
 duration=$SECONDS
 printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"

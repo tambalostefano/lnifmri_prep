@@ -7,6 +7,7 @@
 # Preprocess structural data, e.g. T1 MPRAGE, MP2RAGE, MEMPRAGE, T2, ecc.
 #
 ########################################################################
+export LC_ALL=C
 
 shopt -s extglob
 Usage() {
