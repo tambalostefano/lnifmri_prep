@@ -88,7 +88,9 @@ for SUBDIR in sub-*[0-9] ; do
 		jsonname=`$FSLDIR/bin/remove_ext ${scanname}`
 		OUTNAME=""
 
-		TR=$(cat $SUBDIR/func/${jsonname}.json | sed 's/.*"RepetitionTime": \(.*\),.*/\1/;t;d')
+		# TR=$(cat $SUBDIR/func/${jsonname}.json | sed 's/.*"RepetitionTime": \(.*\),.*/\1/;t;d')
+		TR=$(awk '$1 ~ /"RepetitionTime"/ {print $2}' $SUBDIR/func/${jsonname}_parameters.json | tr -d ',')
+
 		#printf "\tScan Name: $scanname\n\tEpi Name: $epiname\n\tEpi IMG: $epiimg\n\tJSON name: $jsonname\n\tTR: $TR\n"
 
 	    printf "\tExtracting WM regressor\n"

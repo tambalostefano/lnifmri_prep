@@ -67,19 +67,22 @@ subcount=0
 for SUBDIR in sub-*[0-9] ; do
 #cd ${subdir}
 #echo $SUBDIR
-    for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/lnifmri_prep_files/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do
+    for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do
 
         epiname=`$FSLDIR/bin/remove_ext ${epiimg}`
         scanname=`basename ${epiimg}`
 
-        #printf "\tDataset: ${epiname}\n"
+        printf "\tDataset: ${epiname}\n"
 
         for f in "${!fields[@]}" ; do
             
-            str="s|.*"\"${fields[$f]}\"": \(.*\),.*|\1|;t;d"
-            #echo "$str"
-            pars[$f]=$(cat ${epiname}.json | sed "${str}") # >> ${QCDIR}/cacca.txt
-            #echo ${pars[$f]}
+            # parsing with awk (to retain MacOS compatibility)
+            pars[$f]=$(awk '$1 ~ /"'"${fields[$f]}"'"/ {print $2}' ${epiname}.json | tr -d ',')
+          
+            # parsing with sed
+            # str="s|.*"\"${fields[$f]}\"": \(.*\),.*|\1|;t;d"
+            # pars[$f]=$(cat ${epiname}.json | sed "${str}") # >> ${QCDIR}/cacca.txt
+
             numpars[$f]=`cksum <<< ${pars[$f]} | cut -f 1 -d ' '`
             printf "${pars[$f]}\t" >> ${QCDIR}/qc_screen_rawfunc.txt
             printf "${numpars[$f]}\t" >> ${QCDIR}/qc_screen_func.txt            
@@ -92,27 +95,27 @@ for SUBDIR in sub-*[0-9] ; do
 
     done #${epiname}
 
-    printf "[%2s]\t%s\t\n" "$(( ++subcount ))" "${SUBDIR}" >> ${QCDIR}/qc_screen_rows.txt
+    # printf "[%2s]\t%s\t\n" "$(( ++subcount ))" "${SUBDIR}" >> ${QCDIR}/qc_screen_rows.txt
 
 done #for .sub
 
-# ################ ONLY FOR TESTING PURPOSE #########################################
-# ###################################################################################
-dTR=1.1
-dTE=0.032
-dBW=2237
-dES=0.00061
-dMB=8
-dTRc=`cksum <<< ${dTR} | cut -f 1 -d ' '`
-dTEc=`cksum <<< ${dTE} | cut -f 1 -d ' '`
-dBWc=`cksum <<< ${dBW} | cut -f 1 -d ' '`
-dESc=`cksum <<< ${dES} | cut -f 1 -d ' '`
-dMBc=`cksum <<< ${dMB} | cut -f 1 -d ' '`
+# # ################ ONLY FOR TESTING PURPOSE #########################################
+# # ###################################################################################
+# dTR=1.1
+# dTE=0.032
+# dBW=2237
+# dES=0.00061
+# dMB=8
+# dTRc=`cksum <<< ${dTR} | cut -f 1 -d ' '`
+# dTEc=`cksum <<< ${dTE} | cut -f 1 -d ' '`
+# dBWc=`cksum <<< ${dBW} | cut -f 1 -d ' '`
+# dESc=`cksum <<< ${dES} | cut -f 1 -d ' '`
+# dMBc=`cksum <<< ${dMB} | cut -f 1 -d ' '`
 
-printf "${dTRc}\t${dTEc}\t${dBWc}\t${dESc}\t${dMBc}\n" >> ${QCDIR}/qc_screen_func.txt
-printf "1\n" >> ${QCDIR}/qc_screen_design.txt
-# ####################################################################################
-# ####################################################################################
+# printf "${dTRc}\t${dTEc}\t${dBWc}\t${dESc}\t${dMBc}\n" >> ${QCDIR}/qc_screen_func.txt
+# printf "1\n" >> ${QCDIR}/qc_screen_design.txt
+# # ####################################################################################
+# # ####################################################################################
 
 $FSLDIR/bin/fsl_glm -i ${QCDIR}/qc_screen_func.txt \
                     -d ${QCDIR}/qc_screen_design.txt \
@@ -155,6 +158,5 @@ cat ${QCDIR}/qc_screen_headers.txt ${QCDIR}/qc_screen_table.txt > ${QCDIR}/qc_sc
 cat ${QCDIR}/qc_screen_keyheaders.txt | sed 's/\t/,|,/g' | column -s ',' -t
 printf "\n"
 cat ${QCDIR}/qc_screen_display.txt | sed 's/\t/,|,/g' | column -s ',' -t
-
 
 NextStep

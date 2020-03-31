@@ -54,18 +54,32 @@ for SUBDIR in sub-*[0-9] ; do
     for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do
 
         epiname=`$FSLDIR/bin/remove_ext ${epiimg}`
-        scanname=`basename ${epiimg}`
+        # scanname=`basename ${epiimg}`
 
         printf "\tDataset: ${epiname}\n"
 
-        #Extract core parameters from JSON
-        TR=$(cat ${epiname}.json | sed 's/.*"RepetitionTime": \(.*\),.*/\1/;t;d')
+        printf "\tReformat JSON file\n"
+        cat ${epiname}.json | tr -d '\n' > ${epiname}_temp1.json
+        sed 's/,\t"/,\n"/g' ${epiname}_temp1.json > ${epiname}_temp2.json
+        cat ${epiname}_temp2.json | tr -d '\t' > ${epiname}_parameters.json
 
         #Store multiband slice timing extracted from JSON
-        cat ${epiname}.json | \
-        tr -d '\n\t' | \
-        sed 's/.*"SliceTiming": \[\([^]]*\)\].*/\1/g' | \
-        tr ',' '\n' > $SUBDIR/func/${scanname}_slicetiming.txt;
+        awk '$1 ~ /"SliceTiming"/ {print $2}' ${epiname}_parameters.json >> ${epiname}_temp_slicetiming.json
+        cat ${epiname}_temp_slicetiming.json | tr ',[]' '\n' > ${epiname}_slicetiming.txt
+
+        
+        #Extract core parameters from JSON
+        # TR=$(cat ${epiname}.json | sed 's/.*"RepetitionTime": \(.*\),.*/\1/;t;d')
+        TR=$(awk '$1 ~ /"RepetitionTime"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+
+        # echo "TR: ${TR}"
+
+        #Store multiband slice timing extracted from JSON
+        # cat ${epiname}.json | \
+        # tr -d '\n\t' | \
+        # sed 's/.*"SliceTiming": \[\([^]]*\)\].*/\1/g' | \
+        # tr ',' '\n' > $SUBDIR/func/${scanname}_slicetiming.txt;
+        # awk '/SliceTiming: \[/,/\]/' {epiname}.json | tr -d '[A-z:]' >> $SUBDIR/func/${scanname}_slicetiming.txt
 
         #Next steps are self-explanatory
         printf "\tDiscarding first 10 vols\n"
@@ -81,7 +95,7 @@ for SUBDIR in sub-*[0-9] ; do
         $FSLDIR/bin/slicetimer  -i $epiimg \
                                 -o $epiimg \
                                 --odd -r $TR \
-                                --tcustom=$SUBDIR/func/${scanname}_slicetiming.txt;
+                                --tcustom=${epiname}_slicetiming.txt;
 
         printf "\tMotion Correction\n"
         $FSLDIR/bin/mcflirt -in $epiimg \
@@ -91,29 +105,29 @@ for SUBDIR in sub-*[0-9] ; do
                             -rmsrel -rmsabs \
                             -spline_final;
         #Plot motion traces
-        $FSLDIR/bin/fsl_tsplot  -i $SUBDIR/func/${scanname}.par \
+        $FSLDIR/bin/fsl_tsplot  -i ${epiname}.par \
                                 -t 'MCFLIRT estimated rotations (radians)' \
                                 -u 1 --start=1 --finish=3 -a x,y,z -w 640 -h 144 \
                                 --ymin=-0.01 --ymax=0.01 \
-                                -o $SUBDIR/func/${scanname}_rot.png;
+                                -o ${epiname}_rot.png;
         #Plot motion traces
-        $FSLDIR/bin/fsl_tsplot  -i $SUBDIR/func/${scanname}.par \
+        $FSLDIR/bin/fsl_tsplot  -i ${epiname}.par \
                                 -t 'MCFLIRT estimated translations (mm)' \
                                 --ymin=-1 --ymax=1 \
                                 -u 1 --start=4 --finish=6 -a x,y,z -w 640 -h 144 \
-                                -o $SUBDIR/func/${scanname}_tra.png;
+                                -o ${epiname}_tra.png;
 
         printf "\tDetecting motion outliers\n\n"
         $FSLDIR/bin/fsl_motion_outliers -i $epiimg \
-                                        -o $SUBDIR/func/${scanname}_motout.txt \
-                                        -s $SUBDIR/func/${scanname}_motoutdvars.txt \
+                                        -o ${epiname}_motout.txt \
+                                        -s ${epiname}_motoutdvars.txt \
                                         --dvars --nomoco;
         #Plot motion traces
-        $FSLDIR/bin/fsl_tsplot  -i $SUBDIR/func/${scanname}_motoutdvars.txt \
+        $FSLDIR/bin/fsl_tsplot  -i ${epiname}_motoutdvars.txt \
                                 -t 'Motion Outlier Metric: dvars' \
                                 -a out -w 640 -h 144 \
                                 --ymin=0 --ymax=100 \
-                                -o $SUBDIR/func/${scanname}_motout.png;                                    
+                                -o ${epiname}_motout.png;                                    
     done #${epiname}
 done #for .sub
 duration=$SECONDS

@@ -95,8 +95,9 @@ for SUBDIR in sub-*[0-9] ; do
 	# #################################################################################################
 	# PREPARE FIELDMAP
 	shopt -s nullglob
-	set -- $SUBDIR/sdc/*gre_field_mapping*e[12].nii.gz
-	if [ "$#" -gt 0 ]; then
+	# set -- $SUBDIR/sdc/*gre_field_mapping*e[12].nii.gz
+	if ls $SUBDIR/sdc/*gre_field_mapping*e[12].nii.gz 1> /dev/null 2>&1; then
+	# if [[ -f $SUBDIR/sdc/*gre_field_mapping*e[12].nii.gz ]]; then
 		printf "\tPreparing fielmap\n"
 		runfmap=1
 		#Set array to store Echo Times
@@ -105,7 +106,13 @@ for SUBDIR in sub-*[0-9] ; do
 		#Process Magnitude GRE dataset
 		for n in `$FSLDIR/bin/imglob $SUBDIR/sdc/*gre_field_mapping*_e[12].nii.gz` ; do
 		    g=`$FSLDIR/bin/remove_ext ${n}`
-		    printf "\tRunning BET on $n\n"
+
+			printf "\tReformat JSON file\n"
+    	    cat ${g}.json | tr -d '\n' > ${g}_temp1.json
+       		sed 's/,\t\"/,\n\"/g' ${g}_temp1.json > ${g}_temp2.json
+       	 	cat ${g}_temp2.json | tr -d '\t' > ${g}_parameters.json
+
+		    printf "\tRunning BET on ${n}\n"
 		    $FSLDIR/bin/bet $n ${g}_brain \
 		    	-f 0.4 \
 		    	-g 0.1 \
@@ -113,7 +120,7 @@ for SUBDIR in sub-*[0-9] ; do
 		    #Erode brain-extracted image to exclude noisy voxels
 		    $FSLDIR/bin/fslmaths ${g}_brain -ero ${g}_brain_eroded
 			#Parse EchoTime from JSON
-			etime=$(cat ${g}.json | sed 's/.*"EchoTime": \(.*\),.*/\1/;t;d')
+			etime=$(awk '$1 ~ /"EchoTime"/ {print $2}' ${g}_parameters.json | tr -d ',')
 		    ediff+=(${etime})
 		done
 
@@ -139,8 +146,9 @@ for SUBDIR in sub-*[0-9] ; do
 	#################################################################################################
 	# PREPARE AP/PA FOR TOPUP
 	shopt -s nullglob
-	set -- $SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz
-	if [ "$#" -gt 0 ]; then
+	# set -- $SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz
+	if ls $SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz 1> /dev/null 2>&1; then
+	# if [[ -f $SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz ]]; then
 		printf "\n\tPreparing config file for topup\n"
 		runtopup=1
 		#Default parameters config-file for topup
@@ -169,18 +177,30 @@ for SUBDIR in sub-*[0-9] ; do
 		printf "\tScan Name: $scanname\n\tEpi Name: $epiname\n"
 
 		#Extract core parameters from JSON
-		echosp=$(cat ${epiname}.json | sed 's/.*"DerivedVendorReportedEchoSpacing": \(.*\),.*/\1/;t;d')
-		phenc=$(cat ${epiname}.json | sed 's/.*"PhaseEncodingDirection": "\(.*\)".*/\1/;t;d')
-		case $phenc in
-			#AP
-			"j-")
-				pedir="-y"
-			;;
-			#PA
-			"j")
-				pedir="y"
-			;;
-		esac
+		# echosp=$(cat ${epiname}.json | sed 's/.*"DerivedVendorReportedEchoSpacing": \(.*\),.*/\1/;t;d')
+		# phenc=$(cat ${epiname}.json | sed 's/.*"PhaseEncodingDirection": "\(.*\)".*/\1/;t;d')
+		
+		echosp=$(awk '$1 ~ /"DerivedVendorReportedEchoSpacing"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+        phenc=$(awk '$1 ~ /"PhaseEncodingDirection"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+		
+		# echo ${phenc}
+
+		[ $phenc == "\"j-\"" ] \
+			&& pedir="-y" \
+			|| pedir="y";
+			
+		# case ${phenc} in
+		# 	#AP
+		# 	"j-")
+		# 		pedir="-y"
+		# 	;;
+		# 	#PA
+		# 	"j")
+		# 		pedir="y"
+		# 	;;
+		# esac
+
+		# echo ${pedir}
 
 		##########################################################################################
 		#
@@ -236,7 +256,7 @@ for SUBDIR in sub-*[0-9] ; do
 			printf "\tCreating EPI to MNI composite warps\n"
 			$FSLDIR/bin/convertwarp	-r ${std} \
 									--warp1=$FMAPDIR/${scanname}_warp \
-									--warp2=$SUBDIR/$STR.anat/T1_to_MNI_nonlin_field.nii.gz \
+									--warp2=$SUBDIR/${STR}.anat/T1_to_MNI_nonlin_field.nii.gz \
 									-j $FMAPDIR/${scanname}_jac2MNI.nii.gz \
 									-o $FMAPDIR/${scanname}_warp2MNI.nii.gz;
 
@@ -272,23 +292,29 @@ for SUBDIR in sub-*[0-9] ; do
 			TUPDIR=$SUBDIR/func/sdc_tup
 			printf "\n\tSaving TOPUP unwarped data to: $TUPDIR\n"
 			#Extract core parameters from JSON
-			acqmtxpe=$(cat ./${epiname}.json | sed 's/.*"AcquisitionMatrixPE": \(.*\),.*/\1/;t;d')
+			# acqmtxpe=$(cat ./${epiname}.json | sed 's/.*"AcquisitionMatrixPE": \(.*\),.*/\1/;t;d')
+			acqmtype=$(awk '$1 ~ /"AcquisitionMatrixPE"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
 			totreadtime=`echo "scale=4;${echosp}*(${acqmtxpe}-1)" | bc -l`
 
 			#Write config-file for topup
 			par="$TUPDIR/${scanname}_blipudpars.par"
-			case $phenc in
-				#AP
-				"j-")
-					#pedir="-y"
-					printf "0 -1 0 ${totreadtime}\n0 1 0 ${totreadtime}\n" >> ${par}
-				;;
-				#PA
-				"j")
-					#pedir="y"
-					printf "0 1 0 ${totreadtime}\n0 -1 0 ${totreadtime}\n" >> ${par}
-				;;
-			esac
+
+			[ $phenc == "\"j-\"" ] \
+				&& printf "0 -1 0 ${totreadtime}\n0 1 0 ${totreadtime}\n" >> ${par} \
+				|| printf "0 1 0 ${totreadtime}\n0 -1 0 ${totreadtime}\n" >> ${par};
+
+			# case $phenc in
+			# 	#AP
+			# 	"j-")
+			# 		#pedir="-y"
+			# 		printf "0 -1 0 ${totreadtime}\n0 1 0 ${totreadtime}\n" >> ${par}
+			# 	;;
+			# 	#PA
+			# 	"j")
+			# 		#pedir="y"
+			# 		printf "0 1 0 ${totreadtime}\n0 -1 0 ${totreadtime}\n" >> ${par}
+			# 	;;
+			# esac
 
 			printf "\tRunning topup\n"
 			$FSLDIR/bin/topup	--imain=$SUBDIR/sdc/ep2d_topup_fieldmap.nii.gz \
@@ -345,7 +371,7 @@ for SUBDIR in sub-*[0-9] ; do
 			printf "\tCreating EPI to MNI composite warps\n"
 			$FSLDIR/bin/convertwarp	-r ${std} \
 									--warp1=$TUPDIR/${scanname}_warp \
-									--warp2=$SUBDIR/$STR.anat/T1_to_MNI_nonlin_field.nii.gz \
+									--warp2=$SUBDIR/${STR}.anat/T1_to_MNI_nonlin_field.nii.gz \
 									-j $TUPDIR/${scanname}_jac2MNI.nii.gz \
 									-o $TUPDIR/${scanname}_warp2MNI.nii.gz;
 
@@ -411,7 +437,7 @@ for SUBDIR in sub-*[0-9] ; do
 		printf "\tCreating EPI to MNI composite warps\n"
 		$FSLDIR/bin/convertwarp	-r ${std} \
 								--premat=$UNCDIR/${scanname}.mat \
-								--warp2=$SUBDIR/$STR.anat/T1_to_MNI_nonlin_field.nii.gz \
+								--warp2=$SUBDIR/${STR}.anat/T1_to_MNI_nonlin_field.nii.gz \
 								-j $UNCDIR/${scanname}_jac2MNI.nii.gz \
 								-o $UNCDIR/${scanname}_warp2MNI.nii.gz;
 
