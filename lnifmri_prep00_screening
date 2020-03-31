@@ -67,7 +67,7 @@ subcount=0
 for SUBDIR in sub-*[0-9] ; do
 #cd ${subdir}
 #echo $SUBDIR
-    for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do
+    for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/lnifmri_prep_files/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do
 
         epiname=`$FSLDIR/bin/remove_ext ${epiimg}`
         scanname=`basename ${epiimg}`
