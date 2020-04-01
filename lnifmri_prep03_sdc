@@ -293,7 +293,7 @@ for SUBDIR in sub-*[0-9] ; do
 			printf "\n\tSaving TOPUP unwarped data to: $TUPDIR\n"
 			#Extract core parameters from JSON
 			# acqmtxpe=$(cat ./${epiname}.json | sed 's/.*"AcquisitionMatrixPE": \(.*\),.*/\1/;t;d')
-			acqmtype=$(awk '$1 ~ /"AcquisitionMatrixPE"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+			acqmtxpe=$(awk '$1 ~ /"AcquisitionMatrixPE"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
 			totreadtime=`echo "scale=4;${echosp}*(${acqmtxpe}-1)" | bc -l`
 
 			#Write config-file for topup
