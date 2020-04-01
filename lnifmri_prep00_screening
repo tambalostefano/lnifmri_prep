@@ -38,14 +38,15 @@ Start() {
 
 }
 
-NextStep() {
+Prompt() {
     printf "\n***************************************************\n"
-    printf "LNiF MRI Lab Preprocessing Pipeline\n"
-    printf "CIMeC - Center for Mind/Brain Science\n\n"
-    printf "Complete. Exec. Time: ${exectime}\nNow run lnifmri_prep03_sdc"
-    printf "\n\n***************************************************\n\n"
-    exit 1
+    printf "Please enter a list of subjects' Code\n"
+    printf "that you wish to exclude from the analysis, e.g.:\n\n"
+    printf "List: 01,05\n\n"
+    printf "Valid separators are: , ; [space] - _\n"    
+    printf "\n***************************************************\n\n"
 }
+
 
 [ "$FSLDIR" = "" ] && Usage
 exectime=0
@@ -58,6 +59,7 @@ declare -a fields=( "RepetitionTime" \
                     "EchoTime" \
                     "PixelBandwidth" \
                     "DerivedVendorReportedEchoSpacing" \
+                    "ReceiveCoilActiveElements" \
                     "MultibandAccelerationFactor");
 declare -A pars
 declare -A numpars
@@ -85,7 +87,7 @@ for SUBDIR in sub-*[0-9] ; do
 
             numpars[$f]=`cksum <<< ${pars[$f]} | cut -f 1 -d ' '`
             printf "${pars[$f]}\t" >> ${QCDIR}/qc_screen_rawfunc.txt
-            printf "${numpars[$f]}\t" >> ${QCDIR}/qc_screen_func.txt            
+            printf "${numpars[$f]}\t" >> ${QCDIR}/qc_screen_func.txt     
 
         done
 
@@ -95,9 +97,10 @@ for SUBDIR in sub-*[0-9] ; do
 
     done #${epiname}
 
-    # printf "[%2s]\t%s\t\n" "$(( ++subcount ))" "${SUBDIR}" >> ${QCDIR}/qc_screen_rows.txt
+    printf "[%02d]\t%s\t\n" "$(( ++subcount ))" "${SUBDIR}" >> ${QCDIR}/qc_screen_rows.txt
 
 done #for .sub
+printf "\n"
 
 # # ################ ONLY FOR TESTING PURPOSE #########################################
 # # ###################################################################################
@@ -154,9 +157,56 @@ done
 printf "\n" >> ${QCDIR}/qc_screen_headers.txt
 
 paste -d " " ${QCDIR}/qc_screen_rows.txt ${QCDIR}/qc_screen_rawfunc.txt > ${QCDIR}/qc_screen_table.txt
-cat ${QCDIR}/qc_screen_headers.txt ${QCDIR}/qc_screen_table.txt > ${QCDIR}/qc_screen_display.txt
+
+# #Print legend
+# cat ${QCDIR}/qc_screen_keyheaders.txt | sed 's/\t/,|,/g' | column -s ',' -t
+# printf "\n"
+# #Print table headers
+# cat ${QCDIR}/qc_screen_headers.txt | sed 's/\t/,|,/g' | column -s ',' -t
+# #Format data table
+# cat ${QCDIR}/qc_screen_table.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/qc_screen_formattedtable.txt
+# sort -k 5 ${QCDIR}/qc_screen_formattedtable.txt | uniq -f 5 --group=prepend > ${QCDIR}/qc_screen_sortedtable.txt
+# #Print sorted data table
+# cat ${QCDIR}/qc_screen_sortedtable.txt
+
+#Print legend
 cat ${QCDIR}/qc_screen_keyheaders.txt | sed 's/\t/,|,/g' | column -s ',' -t
 printf "\n"
-cat ${QCDIR}/qc_screen_display.txt | sed 's/\t/,|,/g' | column -s ',' -t
+#Print table headers
+cat ${QCDIR}/qc_screen_headers.txt ${QCDIR}/qc_screen_table.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/qc_screen_formattedtable.txt
+cat ${QCDIR}/qc_screen_formattedtable.txt | awk 'NR<2 {print $0;next} {print $0 | "sort -k 5 | uniq -f 5 --group=prepend"}'
 
-NextStep
+
+while true; do
+
+    Prompt
+    
+    while true; do
+    
+        list=""
+        
+        read -p "List: " list
+
+        case "$list" in
+            *","*|*";"*|*" "*|*"-"*|*"_"*)
+                break;;
+            *)
+                printf "\nMissing valid separator, please re-enter "
+                ;;
+        esac
+
+    done 
+    
+    printf "\nSubj. ${list} will be excluded from the analysis.\nDo you wish to proceed? (y/n): "
+    read answer
+    case "$answer" in
+        [yY]* )
+            printf "\nWorkflow started. Subj. [%s] will not be processed.\n" "${list}"
+            break;;
+        [nN]* )
+            ;;
+        * )
+            printf "\n%s\n" 'Answer either “y” or “n”.'
+            ;;
+    esac
+done
