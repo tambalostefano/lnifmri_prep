@@ -31,7 +31,7 @@ Usage() {
 }
 
 Start() {
-    # clear
+    clear
     printf "**************************************************************\n"
     printf "**************************************************************\n"
     printf "####################### TEST VERSION #########################\n"
@@ -59,7 +59,7 @@ SECONDS=0
 QCDIR=`pwd`/qc
 pnglist=""
 
-# Start
+Start
 
 # Define list of key parameters to be compared
 declare -a fields=( "RepetitionTime" \
@@ -178,8 +178,8 @@ paste -d " " ${QCDIR}/qc_screen_rows.txt ${QCDIR}/qc_screen_rawfunc.txt > ${QCDI
 cat ${QCDIR}/qc_screen_headers.txt ${QCDIR}/qc_screen_table.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/qc_screen_formattedtable.txt
 
 while true; do
-    # clear
-    # Start
+    clear
+    Start
     
     #Print legend and formatted data table
     cat ${QCDIR}/qc_screen_keyheaders.txt | sed 's/\t/,|,/g' | column -s ',' -t
