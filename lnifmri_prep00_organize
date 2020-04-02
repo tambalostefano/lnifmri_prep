@@ -118,7 +118,7 @@ for SUBRAW in *.sub ; do
             $OUTDIR/$SUBDIR/$MISCDIR;
 
     #copy dataset into the corresponding directory
-    for f in $SUBPATH/*.{nii.gz,json} ; do
+    for f in $SUBPATH/*.{nii.gz,json,bval,bvec} ; do
         d=`basename $f`
         #printf "$f\n"
         #printf "$d\n\n"
