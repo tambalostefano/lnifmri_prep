@@ -71,16 +71,10 @@ declare -a fields=( "RepetitionTime" \
 declare -A pars
 declare -A numpars
 
-<<<<<<< HEAD
-=======
 subcount=0
 
-<<<<<<< HEAD
->>>>>>> feat-screening
-=======
 printf "Parsing acquisition parameters\n"    
 
->>>>>>> feat-screening
 for SUBDIR in sub-*[0-9] ; do
 
     for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do
@@ -95,30 +89,6 @@ for SUBDIR in sub-*[0-9] ; do
         printf "\tDataset: ${scanname}\n"
 
         for f in "${!fields[@]}" ; do
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-            #printf "$scanname\t$f\t${fields[f]}\n"
-
-            pars[$f]=$(cat ${epiname}.json | sed 's/.*"${fields[$f]}": \(.*\),.*/\1/;t;d')
-
-            printf '%s: %s\n' "${fields[$f]}" "${pars[$f]}"
-
-            #numpars[f]=`cksum <<< ${pars[f]} | cut -f 1 -d ' '`
-            #printf "${pars[f]}\t" >> ${QCDIR}/qc_screen_rawfunc.txt
-            #printf "${numpars[f]}\t" >> ${QCDIR}/qc_screen_func.txt            
-
-        done
-
-        #printf "\n" >> ${QCDIR}/qc_screen_rawfunc.txt
-        #printf "\n" >> ${QCDIR}/qc_screen_func.txt
-        #printf "1\n" >> ${QCDIR}/qc_screen_design.txt
-
-    done #${epiname}
-=======
-            
-=======
->>>>>>> feat-screening
             # parsing with awk (to retain MacOS compatibility)
             pars[$f]=$(awk '$1 ~ /"'"${fields[$f]}"'"/ {print $2}' ${epiname}.json | tr -d ',')
             # compute hash code of read parameter
@@ -135,36 +105,20 @@ for SUBDIR in sub-*[0-9] ; do
         printf "1\n" >> ${QCDIR}/qc_screen_design.txt
     done #${epiname}
 
-<<<<<<< HEAD
-    # printf "[%2s]\t%s\t\n" "$(( ++subcount ))" "${SUBDIR}" >> ${QCDIR}/qc_screen_rows.txt
-
->>>>>>> feat-screening
-=======
     printf "[%02d]\t\n" "$(( ++subcount ))" >> ${QCDIR}/qc_screen_code.txt
     printf "%s\t\n" "${SUBDIR}" >> ${QCDIR}/qc_screen_subs.txt
->>>>>>> feat-screening
 done #for .sub
 paste -d " " ${QCDIR}/qc_screen_code.txt ${QCDIR}/qc_screen_subs.txt > ${QCDIR}/qc_screen_rows.txt
 
 printf "\n"
 
-<<<<<<< HEAD
-# ################ ONLY FOR TESTING PURPOSE #########################################
-# ###################################################################################
-<<<<<<< HEAD
-=======
 # # ################ ONLY FOR TESTING PURPOSE #########################################
 # # ###################################################################################
->>>>>>> feat-screening
 # dTR=1.1
 # dTE=0.032
 # dBW=2237
 # dES=0.00061
-<<<<<<< HEAD
-# dMB=6
-=======
 # dMB=8
->>>>>>> feat-screening
 # dTRc=`cksum <<< ${dTR} | cut -f 1 -d ' '`
 # dTEc=`cksum <<< ${dTE} | cut -f 1 -d ' '`
 # dBWc=`cksum <<< ${dBW} | cut -f 1 -d ' '`
@@ -173,54 +127,8 @@ printf "\n"
 
 # printf "${dTRc}\t${dTEc}\t${dBWc}\t${dESc}\t${dMBc}\n" >> ${QCDIR}/qc_screen_func.txt
 # printf "1\n" >> ${QCDIR}/qc_screen_design.txt
-<<<<<<< HEAD
-# ####################################################################################
-# ####################################################################################
-
-# $FSLDIR/bin/fsl_glm -i ${QCDIR}/qc_screen_func.txt \
-#                     -d ${QCDIR}/qc_screen_design.txt \
-#                     -o ${QCDIR}/qc_screen_out.txt \
-#                     --out_res=${QCDIR}/qc_screen_res.txt
-
-# awk '{ if (NR==1) { n = split($0, a, " "); } for (i=1; i<n; i++) { printf("%.4f\t", ($i/a[i])); } printf("%.4f\n", ($n/a[n])); }' ${QCDIR}/qc_screen_res.txt > ${QCDIR}/qc_screen_resnorm.txt
-
-# #Replace NaN values
-# sed -i 's/-nan/1/g' ${QCDIR}/qc_screen_resnorm.txt 
-# #nc=`awk -F'\t' '{printf NF; exit}' ${QCDIR}/qc_screen_resnorm.txt`
-
-# for p in "${!fields[@]}"; do
-# #Plot motion traces
-#     l=${p}+1
-#     $FSLDIR/bin/fsl_tsplot  -i ${QCDIR}/qc_screen_resnorm.txt \
-#                        	    -t '"${fields[p]}" Parameter Inconsistencies' \
-#                        	    -u 1 -w 640 -h 144 \
-#                             --start=${l} --finish=${l} \
-#                        	    --ymin=-3 --ymax=3 \
-#                        	    -o ${QCDIR}/lnifmri_prep_screenpars_${fields[p]}_func_QC.png;
-# done
-
-duration=$SECONDS
-printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."
-=======
-dTR=1.1
-dTE=0.032
-dBW=2237
-dES=0.00061
-dMB=8
-dTRc=`cksum <<< ${dTR} | cut -f 1 -d ' '`
-dTEc=`cksum <<< ${dTE} | cut -f 1 -d ' '`
-dBWc=`cksum <<< ${dBW} | cut -f 1 -d ' '`
-dESc=`cksum <<< ${dES} | cut -f 1 -d ' '`
-dMBc=`cksum <<< ${dMB} | cut -f 1 -d ' '`
-
-printf "${dTRc}\t${dTEc}\t${dBWc}\t${dESc}\t${dMBc}\n" >> ${QCDIR}/qc_screen_func.txt
-printf "1\n" >> ${QCDIR}/qc_screen_design.txt
-# ####################################################################################
-# ####################################################################################
-=======
 # # ####################################################################################
 # # ####################################################################################
->>>>>>> feat-screening
 
 if [ "$subcount" -gt "1" ]; then
     $FSLDIR/bin/fsl_glm -i ${QCDIR}/qc_screen_func.txt \
@@ -271,14 +179,6 @@ paste -d " " ${QCDIR}/qc_screen_rows.txt ${QCDIR}/qc_screen_rawfunc.txt > ${QCDI
 #Print table headers
 cat ${QCDIR}/qc_screen_headers.txt ${QCDIR}/qc_screen_table.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/qc_screen_formattedtable.txt
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-
->>>>>>> feat-screening
-=======
->>>>>>> feat-screening
-NextStep
-=======
 while true; do
     # clear
     Start
@@ -330,4 +230,3 @@ while true; do
     done
 
 done
->>>>>>> feat-screening
