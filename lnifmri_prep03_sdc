@@ -81,7 +81,9 @@ QCDIR=`pwd`/qc
 
 Start
 
-for SUBDIR in sub-*[0-9] ; do
+# for SUBDIR in sub-*[0-9] ; do
+for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
+	
 	printf -v STR "${SUBDIR}_ses-01_T1w"
 
 	#define different images/masks to load

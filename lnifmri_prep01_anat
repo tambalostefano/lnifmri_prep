@@ -43,8 +43,8 @@ exectime=0
 SECONDS=0
 
 Start
-
-for SUBDIR in sub-* ; do
+#for SUBDIR in sub-* ; do
+for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
 	#Look for T1 or T2w images
    	subcount=0
     for s in `$FSLDIR/bin/imglob $SUBDIR/anat/*t[12]_*[0-9]_+([0-9]).nii.gz`; do
