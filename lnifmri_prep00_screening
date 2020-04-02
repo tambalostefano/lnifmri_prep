@@ -31,7 +31,7 @@ Usage() {
 }
 
 Start() {
-    clear
+    # clear
     printf "**************************************************************\n"
     printf "**************************************************************\n"
     printf "####################### TEST VERSION #########################\n"
@@ -157,9 +157,9 @@ if [ "$subcount" -gt "1" ]; then
         
         [[ -z "$pnglist" ]] && pnglist="${pnglist} ${plot}" || pnglist="${pnglist} - ${plot}"
     done
-
     $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_acqparam_QC.png
 else
+    printf "\nNothing to plot\n"
 fi
 
 duration=$SECONDS
@@ -180,7 +180,7 @@ paste -d " " ${QCDIR}/qc_screen_rows.txt ${QCDIR}/qc_screen_rawfunc.txt > ${QCDI
 cat ${QCDIR}/qc_screen_headers.txt ${QCDIR}/qc_screen_table.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/qc_screen_formattedtable.txt
 
 while true; do
-    clear
+    # clear
     Start
     
     #Print legend and formatted data table

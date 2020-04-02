@@ -42,7 +42,7 @@ Setup() {
 # }
 
 Start() {
-    clear
+    # clear
     stamp=`date +'%T'`
     printf "**************************************************************\n"
     printf "**************************************************************\n"
@@ -131,7 +131,7 @@ printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
 elapsed=$(echo $elapsed + $duration | bc)
 Progress
 
-clear
+# clear
 Start
 
 SECONDS=0
