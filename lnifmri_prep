@@ -70,6 +70,7 @@ Stop() {
 
 [ "$FSLDIR" = "" ] && UsageFSL
 
+clear 
 Setup
 
 default=`date +%Y%m%d_%H%M%S`
@@ -112,6 +113,7 @@ printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: 
 sleep 2
 
 Start
+
 #These are calls to individual tools - lines are self-explanatory
 printf "Creating directory structure\t"
 $LNIFMRIDIR/lnifmri_prep00_organize -o ${DIRNAME} >> ${LOGDIR}/00_organize.txt
@@ -121,6 +123,16 @@ elapsed=$(echo $elapsed + $duration | bc)
 Progress
 
 cd ./${DIRNAME}
+
+printf "Screening Acquisition parameters\t"
+$LNIFMRIDIR/lnifmri_prep00_screening
+duration=$SECONDS
+printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
+elapsed=$(echo $elapsed + $duration | bc)
+Progress
+
+clear
+Start
 
 SECONDS=0
 printf "Processing structural data\t"

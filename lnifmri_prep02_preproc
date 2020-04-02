@@ -48,7 +48,8 @@ SECONDS=0
 
 Start
 
-for SUBDIR in sub-*[0-9] ; do
+# for SUBDIR in sub-*[0-9] ; do
+for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
 #cd ${subdir}
 #echo $SUBDIR
     for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do

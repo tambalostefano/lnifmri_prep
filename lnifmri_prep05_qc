@@ -44,7 +44,9 @@ QCDIR=`pwd`/qc
 
 Start
 
-for SUBDIR in sub-*[0-9] ; do
+# for SUBDIR in sub-*[0-9] ; do
+for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
+
 	#printf "$SUBDIR\n"
 	fs="fmp,"
 	ts="tup,"
@@ -75,8 +77,8 @@ for SUBDIR in sub-*[0-9] ; do
                 		            --ymin=0 --ymax=100 \
                         	    	-o $SUBDIR/func/placeholder_motout.png;
        		mot=$SUBDIR/func/placeholder_motout.png
-			printf -v str  "%s + 10 %s + 10 %s" "$mot" "$rot" "$tra" 
-			pnglist="$pnglist $str - 10 "
+			printf -v str  "%s + %s + %s" "$mot" "$rot" "$tra" 
+			pnglist="$pnglist $str - "
 		fi
 	done #for epiimg
 	#Prepare placeholder for powerspectrum in case some options are missing (FMP, TUP or both)
@@ -124,7 +126,7 @@ $FSLDIR/bin/fsl_tsplot	-i $QCDIR/qc_sum_motout.txt\
 pnglist="$pnglist ${QCDIR}/qc_summary_motout.png"
 $FSLDIR/bin/pngappend ${pnglist} $QCDIR/lnifmri_prep_motion_QC.png
 #Create final plot (power spectrum)
-printf -v pspeclist "$( ls -d1 ${QCDIR}/*pspectra.png | sed ':a;N;$!ba;s/\n/ - 10 /g' )"
+printf -v pspeclist "$( ls -d1 ${QCDIR}/*pspectra.png | sed ':a;N;$!ba;s/\n/ - /g' )"
 $FSLDIR/bin/pngappend ${pspeclist} $QCDIR/lnifmri_prep_pspec_QC.png
 
 #Create filelist for group-ICA in MNI space
