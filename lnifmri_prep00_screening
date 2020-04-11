@@ -34,22 +34,18 @@ Start() {
     # clear
     printf "**************************************************************\n"
     printf "**************************************************************\n"
-    printf "####################### TEST VERSION #########################\n"
-    printf "\tEPI VOLUMES LIMITED TO 140 (prep02)\n"
-    printf "####################### TEST VERSION #########################\n\n"
     printf "LNiF MRI Lab Preprocessing Pipeline\n"
     printf "CIMeC - Center for Mind/Brain Science\n\n"
     printf "Consistency Check of Acq. Parameters\n\n"
 }
 
 Prompt() {
-    printf "\n***************************************************\n"
-    printf "Please enter a list of subjects' Code\n"
-    printf "that you wish to exclude from the analysis\n"
-    printf "separated by [space], e.g.:\n\n"
+    printf "\n**************************************************************\n"
+    printf "To exclude one or more subjects from the workflow,\n"
+    printf "type their code separated by [space] and hit [ENTER], e.g.:\n\n"
     printf "Skip subject(s): 01 05\n\n"
-    printf "Type [ENTER] to process the entire list.\n"
-    printf "\n***************************************************\n\n"
+    printf "Or simply hit [ENTER] to process the entire list."
+    printf "\n**************************************************************\n\n"
 }
 
 
@@ -62,14 +58,14 @@ pnglist=""
 Start
 
 # Define list of key parameters to be compared
-declare -a fields=( "RepetitionTime" \
+declare fields=( "RepetitionTime" \
                     "EchoTime" \
                     "PixelBandwidth" \
                     "DerivedVendorReportedEchoSpacing" \
                     "ReceiveCoilActiveElements" \
                     "MultibandAccelerationFactor");
-declare -A pars
-declare -A numpars
+declare pars
+declare numpars
 
 subcount=0
 
@@ -147,7 +143,7 @@ if [ "$subcount" -gt "1" ]; then
         title=${fields[$p]}
         entry=$(echo "${title}" | tr -dc '[:upper:]')
         $FSLDIR/bin/fsl_tsplot  -i ${QCDIR}/qc_screen_resnorm.txt \
-                           	    -t ${title} \
+                           	    -t ${title} -x "Subject" \
                            	    -w 640 -h 144 \
                                 --start=${l} --finish=${l} \
                            	    --ymin=-3 --ymax=3 \
@@ -159,7 +155,7 @@ if [ "$subcount" -gt "1" ]; then
     done
     $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_acqparam_QC.png
 else
-    printf "\nNothing to plot\n"
+    printf "\nToo few subjects. Nothing to plot.\n"
 fi
 
 duration=$SECONDS
