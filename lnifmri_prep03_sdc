@@ -79,6 +79,19 @@ SECONDS=0
 QCDIR=`pwd`/qc
 #printf $QCDIR
 
+#Wait for 01_anat and 02_preproc to finish
+while true; do
+	stamp=`date +'%T'`
+	printf "\t%s: Waiting for greenlight from 01_anat and 02_preproc\n" "${stamp}"
+	sleep 60
+
+	if [[ -f ./lnifmri_prep01_greenlight.txt  && -f ./lnifmri_prep02_greenlight.txt ]]; then
+		stamp=`date +'%T'`
+		printf "\t%s: Greenlight from 01_anat and 02_preproc: starting SDC process\n" "${stamp}"
+		break
+  	fi
+done
+
 Start
 
 # for SUBDIR in sub-*[0-9] ; do
@@ -96,14 +109,14 @@ for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
 
 	# #################################################################################################
 	# PREPARE FIELDMAP
-	shopt -s nullglob
+	# shopt -s nullglob
 	# set -- $SUBDIR/sdc/*gre_field_mapping*e[12].nii.gz
-	if ls $SUBDIR/sdc/*gre_field_mapping*e[12].nii.gz 1> /dev/null 2>&1; then
-	# if [[ -f $SUBDIR/sdc/*gre_field_mapping*e[12].nii.gz ]]; then
+	# if ls $SUBDIR/sdc/*gre_field_mapping*e[12].nii.gz 1> /dev/null 2>&1; then
+	if 	[ -e $SUBDIR/sdc/*gre_field_mapping*e1.nii.gz -a -e $SUBDIR/sdc/*gre_field_mapping*e2.nii.gz -a -e $SUBDIR/sdc/*gre_field_mapping*ph.nii.gz ]; then
 		printf "\tPreparing fielmap\n"
 		runfmap=1
 		#Set array to store Echo Times
-		declare -a ediff
+		declare ediff
 
 		#Process Magnitude GRE dataset
 		for n in `$FSLDIR/bin/imglob $SUBDIR/sdc/*gre_field_mapping*_e[12].nii.gz` ; do
@@ -142,15 +155,15 @@ for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
 		$FSLDIR/bin/fsl_prepare_fieldmap SIEMENS $phaimg $magbrain $fmap $echdif
 	else
 		runfmap=0
-		printf "\n\tFieldmap not available.\n"
+		printf "\n\tFieldmap data incomplete or not available.\n"
 	fi
 
 	#################################################################################################
 	# PREPARE AP/PA FOR TOPUP
-	shopt -s nullglob
+	# shopt -s nullglob
 	# set -- $SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz
-	if ls $SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz 1> /dev/null 2>&1; then
-	# if [[ -f $SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz ]]; then
+	# if ls $SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz 1> /dev/null 2>&1; then
+	if 	[ -e $SUBDIR/sdc/*ep2d_se_distcorr_AP_*.nii.gz -a -e $SUBDIR/sdc/*ep2d_se_distcorr_PA_*.nii.gz ]; then
 		printf "\n\tPreparing config file for topup\n"
 		runtopup=1
 		#Default parameters config-file for topup
@@ -160,10 +173,10 @@ for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
 		printf "$arg" > ${cnf}
 
 		printf "\tMerging opposite phase encoding SE-EPI\n\n"
-		$FSLDIR/bin/fslmerge -t $SUBDIR/sdc/ep2d_topup_fieldmap `ls -d1 ./$SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz`
+		$FSLDIR/bin/fslmerge -t $SUBDIR/sdc/ep2d_topup_fieldmap `ls -d1 $SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz`
 	else
 		runtopup=0
-		printf "\n\tAP/PA SE data not available.\n\n"
+		printf "\n\tAP/PA SE data incomplete or not available.\n\n"
 	fi
 
 	#################################################################################################
@@ -210,7 +223,7 @@ for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
 		#
 		##########################################################################################
 
-		if [ "$runfmap" -eq "0" ]; then
+		if [[ "${runfmap}" -eq "0" ]]; then
 			printf "\n\tSkipping Fieldmap unwarping\n";
 		else
 			mkdir -m 777 $SUBDIR/func/sdc_fmp
@@ -287,7 +300,7 @@ for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
 		#
 		##########################################################################################
 
-		if [ "$runtopup" -eq "0" ]; then
+		if [[ "${runtopup}" -eq "0" ]]; then
 			printf "\n\tSkipping Topup unwarping\n";
 		else
 			mkdir -m 777 $SUBDIR/func/sdc_tup

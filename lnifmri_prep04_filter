@@ -58,8 +58,26 @@ NextStep() {
 [ "$FSLDIR" = "" ] && UsageFSL
 [ "$1" = "" ] && UsageEPI
 
+runmot=""
+runica=""
+
 #Read answer for optional single-subject ICA
-getopts yn option
+while getopts 'MmIi' option; do
+	case "$option" in
+		M)
+			runmot="y"
+			;;
+		m)
+			runmot="n"
+			;;
+		I)
+			runica="y"
+			;;
+		i)
+			runica="n"
+			;;
+	esac
+done
 
 exectime=0
 SECONDS=0
@@ -107,20 +125,35 @@ for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
 	    printf "\tExtracting GS regressor\n"
 	    $FSLDIR/bin/fslmeants -i ${epiimg} -o ${epiname}_gsregressor.txt -m ${brainmask}
 
-	    #Compose full matrix of regressors (nuisance)
-	    if [ -f $SUBDIR/func/${jsonname}_motout.txt ]; then
-	        printf "\tComposing nuisance regressor (motion, outliers, WM, CSF)\n"
-	        paste -d " " 	$SUBDIR/func/${jsonname}.par \
-	        				$SUBDIR/func/${jsonname}_motout.txt \
-	        				${epiname}_wmregressor.txt \
-	        				${epiname}_csfregressor.txt > ${epiname}_nuisance.txt;
-	    else
-	        printf "\tComposing nuisance regressor (motion, WM, CSF)\n"
-	        paste -d " "	$SUBDIR/func/${jsonname}.par \
-	        				${epiname}_wmregressor.txt \
-	        				${epiname}_csfregressor.txt > ${epiname}_nuisance.txt;
-	    fi
-	    #Regression of nuisance matrix
+	    # Switch deweighting of motion outliers
+	    case "${runmot}" in
+	    	y)
+			    # Compose full matrix of regressors (if motout exists)
+			    if [ -f $SUBDIR/func/${jsonname}_motout.txt ]; then
+			        printf "\tComposing nuisance regressor (motion, outliers, WM, CSF)\n"
+			        paste -d " " 	$SUBDIR/func/${jsonname}.par \
+			        				$SUBDIR/func/${jsonname}_motout.txt \
+			        				${epiname}_wmregressor.txt \
+			        				${epiname}_csfregressor.txt > ${epiname}_nuisance.txt;
+			    else
+			    	# Use only motion parameters and tissue-based regressors
+	    			printf "\tMotion outliers info not available\n"
+			        printf "\tComposing nuisance regressor (motion, WM, CSF)\n"
+			        paste -d " "	$SUBDIR/func/${jsonname}.par \
+			        				${epiname}_wmregressor.txt \
+			        				${epiname}_csfregressor.txt > ${epiname}_nuisance.txt;
+			    fi
+			    ;;
+			n)
+				# Regress motion and tissue-based regressors
+	    		printf "\tMotion outliers deweighting disabled\n"
+	    		printf "\tComposing nuisance regressor (motion, WM, CSF)\n"
+			    paste -d " "	$SUBDIR/func/${jsonname}.par \
+			       				${epiname}_wmregressor.txt \
+			       				${epiname}_csfregressor.txt > ${epiname}_nuisance.txt;
+			    ;;
+		esac	    
+	    # Regression of nuisance matrix
 	    printf "\tRegression of nuisance signals\n"
 	    $FSLDIR/bin/fsl_glm	-i ${epiimg} \
 	    					-d ${epiname}_nuisance.txt \
@@ -131,7 +164,7 @@ for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
 	    #echo "${g}: Noise reduction"
 	    #$FSLDIR/bin/susan $epiimg -1 0.6 3 1 1 ${brainmask} -1 $epiimg
 
-	    #if it's NOT a task-based scan, apply bandpass filtering
+	    # If it's NOT a task-based scan, apply bandpass filtering
 	    if [[ ${scanname} != *"task"* ]]; then
 	    		OUTNAME="${outpath}/${SUBDIR}_bold_rest"
 	    		hp=$(echo 100/2/$TR | bc -l)   #0.01Hz, sigma: 1/(2*f*TR)	as reported in fsl mailing list
@@ -149,7 +182,7 @@ for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
 	    								-y "Power" -x "Frequency (Hz)" \
 	    								-t 'Power Spectrum' \
 	    								-a pow -w 640 -h 144 \
-	    								--ymin=0 --ymax=500000 \
+	    								--ymin=0 --ymax=1000000 \
 	    								-o ${OUTNAME}_spectrum.png;
 	    		printf "\tDONE.\n\n"
 	    	#otherwise skip this step
@@ -174,8 +207,8 @@ for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
 	    #Set GM mask as weighting file?
 
 	    #Run single-subject ICA [otional]
-	    case ${option} in
-	    	"y")
+	    case "${runica}" in
+	    	y)
    				comp=40
    				printf "\tRunning ICA (n=${comp})\n"
    				$FSLDIR/bin/melodic -i ${OUTNAME}-smooth \
@@ -185,7 +218,7 @@ for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
    								-m ${brainmask} \
    								--report -v;
    				;;
-   			"n")
+   			n)
    				printf "\tSkipping SS-ICA\n"
 				;;
 		esac

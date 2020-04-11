@@ -46,9 +46,6 @@ Start() {
     stamp=`date +'%T'`
     printf "**************************************************************\n"
     printf "**************************************************************\n"
-    printf "####################### TEST VERSION #########################\n"
-    printf "\tEPI VOLUMES LIMITED TO 140 (prep02)\n"
-    printf "####################### TEST VERSION #########################\n\n"
     printf "LNiF MRI Lab Preprocessing Pipeline\n"
     printf "CIMeC - Center for Mind/Brain Science\n\n"
     printf "Batch processing\t\t\tStarted\t [  %s ]\n" "${stamp}"
@@ -78,22 +75,41 @@ read -p "Enter directory output name [${default}]: " userinput
 DIRNAME=${userinput:-${default}}
 printf "\n\tOutput directory: %s\n\n" "$DIRNAME"
 
+#Parse input option to run motion outliers deweighting (default: yes)
 while true; do
-    read -p "Run SS-ICA? (y/n) [y]: " answer
-
-    case "$answer" in
+    read -p "Run Motion Outliers Deweighting of timeseries? (y/n) [Recommended: y]: " ansmot
+    case "$ansmot" in
         [yY]* )
             #printf "\n\t%s\n" 'Analysis: resting-state data'
-            type="-${answer}"
+            runmot="M"
             break;;
         [nN]* )
             #printf "\n\t%s\n" 'Analysis: task-based data (skip bptf)'
-            type="-${answer}"
+            runmot="m"
             break;;
         * )
             printf "\n%s\n" 'Answer either “y” or “n”.'
     esac
 done
+printf "\n"
+#Parse input option to run single-subject ICA (default: yes)
+while true; do
+    read -p "Run SS-ICA? (y/n) [Recommended: y]: " ansica
+    case "$ansica" in
+        [yY]* )
+            #printf "\n\t%s\n" 'Analysis: resting-state data'
+            runica="I"
+            break;;
+        [nN]* )
+            #printf "\n\t%s\n" 'Analysis: task-based data (skip bptf)'
+            runica="i"
+            break;;
+        * )
+            printf "\n%s\n" 'Answer either “y” or “n”.'
+    esac
+done
+
+opts="-${runmot}${runica}"
 
 LOGDIR=`pwd`/${DIRNAME}/logs
 SECONDS=0
@@ -129,14 +145,14 @@ $LNIFMRIDIR/lnifmri_prep00_screening
 duration=$SECONDS
 printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
 elapsed=$(echo $elapsed + $duration | bc)
-Progress
+#Progress
 
-# clear
+#clear
 Start
 
 SECONDS=0
 printf "Processing structural data\t"
-$LNIFMRIDIR/lnifmri_prep01_anat >> ${LOGDIR}/01_structural.txt
+$LNIFMRIDIR/lnifmri_prep01_anat >> ${LOGDIR}/01_structural.txt &
 duration=$SECONDS
 printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
 elapsed=$(echo $elapsed + $duration | bc)
@@ -144,7 +160,7 @@ Progress
 
 SECONDS=0
 printf "Processing functional data\n\tMotion correction\t"
-$LNIFMRIDIR/lnifmri_prep02_preproc >> ${LOGDIR}/02_motioncorr.txt
+$LNIFMRIDIR/lnifmri_prep02_preproc >> ${LOGDIR}/02_motioncorr.txt &
 duration=$SECONDS
 printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
 elapsed=$(echo $elapsed + $duration | bc)
@@ -160,7 +176,7 @@ Progress
 
 SECONDS=0
 printf "\tNuis. regr. and BP filter"
-$LNIFMRIDIR/lnifmri_prep04_filter ${type} >> ${LOGDIR}/04_nuisancefilter.txt
+$LNIFMRIDIR/lnifmri_prep04_filter ${opts} >> ${LOGDIR}/04_nuisancefilter.txt
 duration=$SECONDS
 printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
 elapsed=$(echo $elapsed + $duration | bc)
