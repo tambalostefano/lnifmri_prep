@@ -81,154 +81,176 @@ done
 
 exectime=0
 SECONDS=0
+cursubID="none"
+cudsdc="none"
 
 Start
 
-# for SUBDIR in sub-*[0-9] ; do
-for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
+for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
 
-	printf -v STR "${SUBDIR}_ses-01_T1w"
-	
-	t1struc=$SUBDIR/$STR.anat/T1_biascorr.nii.gz
-	bstruc=$SUBDIR/$STR.anat/T1_biascorr_brain.nii.gz
-	wmstruc=$SUBDIR/$STR.anat/T1_wmedge.nii.gz
-	csfstruc=$SUBDIR/$STR.anat/T1_csfedge.nii.gz
-	gmstruc=$SUBDIR/$STR.anat/T1_gmedge.nii.gz
-	brainmask=$SUBDIR/$STR.anat/T1_biascorr_brain_mask.nii.gz
+    epiname=$($FSLDIR/bin/remove_ext ${epiimg})
+	outpath=$(dirname ${epiimg})
+    
+    readarray -d / -t fileparts <<< "${epiimg}"
+    nid=$((${#fileparts[@]}-1))
+    sid=$((${#fileparts[@]}-4))
+    did=$((${#fileparts[@]}-2))
+    nameID=$(echo ${fileparts[${nid}]})
+    subID=$(echo ${fileparts[${sid}]})
+    sdcID=$(echo ${fileparts[${did}]})	
+	jsonID=$($FSLDIR/bin/remove_ext ${nameID})
+	epivol="${epiname}_SINGLEVOL"
+	outname=""
+
+	#define different images/masks to load
+	printf -v STR "${subID}_ses-01_T1w"
+	t1struc=${subID}/$STR.anat/T1_biascorr.nii.gz
+	bstruc=${subID}/$STR.anat/T1_biascorr_brain.nii.gz
+	wmstruc=${subID}/$STR.anat/T1_wmedge.nii.gz
+	gmstruc=${subID}/$STR.anat/T1_gmedge.nii.gz
+	csfstruc=${subID}/$STR.anat/T1_csfedge.nii.gz
+	brainmask=${subID}/$STR.anat/T1_biascorr_brain_mask.nii.gz
 	std=$FSLDIR/data/standard/MNI152_T1_2mm.nii.gz
 	
-	#Load SDC-EPI timeseries
-	for epiimg in `ls -d1 $SUBDIR/func/sdc*/*ep2d_bold*[0-9]_+([0-9]).nii.gz`; do
+	# Check to restart the ses-XX counter
+	if [[ "$cursubID" != "${subID}" || "$cursdc" != "${sdcID}" ]]; then
+		subcount=0
+		cursubID=${subID}
+		cursdc=${sdcID}
+	fi
+	
+	printf "\n%s_ses-%02d:\n" "${subID}" "$(( ++subcount ))"
 
-		#Load bold EPI scan
-		outpath=`dirname ${epiimg}`
-		scanname=`basename ${epiimg}`
-		epiname=`$FSLDIR/bin/remove_ext ${epiimg}`
-		epivol="${epiname}_SINGLEVOL"
-		jsonname=`$FSLDIR/bin/remove_ext ${scanname}`
-		OUTNAME=""
+	TR=$(awk '$1 ~ /"RepetitionTime"/ {print $2}' ${subID}/func/${jsonID}_parameters.json | tr -d ',')
 
-		# TR=$(cat $SUBDIR/func/${jsonname}.json | sed 's/.*"RepetitionTime": \(.*\),.*/\1/;t;d')
-		TR=$(awk '$1 ~ /"RepetitionTime"/ {print $2}' $SUBDIR/func/${jsonname}_parameters.json | tr -d ',')
+	#printf "\tScan Name: $nameID\n\tEpi Name: $epiname\n\tEpi IMG: $epiimg\n\tJSON name: $jsonID\n\tTR: $TR\n"
 
-		#printf "\tScan Name: $scanname\n\tEpi Name: $epiname\n\tEpi IMG: $epiimg\n\tJSON name: $jsonname\n\tTR: $TR\n"
+	printf "\tExtracting WM regressor\n"
+	$FSLDIR/bin/fslmeants -i ${epiimg} -o ${epiname}_regressor_wm.txt -m ${wmstruc}
 
-	    printf "\tExtracting WM regressor\n"
-	    $FSLDIR/bin/fslmeants -i ${epiimg} -o ${epiname}_wmregressor.txt -m ${wmstruc}
+	printf "\tExtracting CSF regressor\n"
+	$FSLDIR/bin/fslmeants -i ${epiimg} -o ${epiname}_regressor_csf.txt -m ${csfstruc}
 
-	    printf "\tExtracting CSF regressor\n"
-	    $FSLDIR/bin/fslmeants -i ${epiimg} -o ${epiname}_csfregressor.txt -m ${csfstruc}
+	printf "\tExtracting GM regressor\n"
+	$FSLDIR/bin/fslmeants -i ${epiimg} -o ${epiname}_regressor_gm.txt -m ${gmstruc}
 
-	    printf "\tExtracting GM regressor\n"
-	    $FSLDIR/bin/fslmeants -i ${epiimg} -o ${epiname}_gmregressor.txt -m ${gmstruc}
+	printf "\tExtracting GS regressor\n"
+	$FSLDIR/bin/fslmeants -i ${epiimg} -o ${epiname}_regressor_gs.txt -m ${brainmask}
 
-	    printf "\tExtracting GS regressor\n"
-	    $FSLDIR/bin/fslmeants -i ${epiimg} -o ${epiname}_gsregressor.txt -m ${brainmask}
+	# Switch deweighting of motion outliers
+	case "${runmot}" in
+		y)
+		    # Compose full matrix of regressors (if motout exists)
+		    if [ -f ${subID}/func/${jsonID}_motout.txt ]; then
+		        printf "\tComposing nuisance regressor (motion, outliers, WM, CSF)\n"
+		        paste -d " " 	${subID}/func/${jsonID}.par \
+		        				${subID}/func/${jsonID}_motout.txt \
+		        				${epiname}_regressor_wm.txt \
+		        				${epiname}_regressor_csf.txt > ${epiname}_nuisance.txt;
+		    else
+		    	# Use only motion parameters and tissue-based regressors
+				printf "\tMotion outliers info not available\n"
+		        printf "\tComposing nuisance regressor (motion, WM, CSF)\n"
+		        paste -d " "	${subID}/func/${jsonID}.par \
+		        				${epiname}_regressor_wm.txt \
+		        				${epiname}_regressor_csf.txt > ${epiname}_nuisance.txt;
+		    fi
+		    ;;
+		n)
+			# Regress motion and tissue-based regressors
+			printf "\tMotion outliers deweighting disabled\n"
+			printf "\tComposing nuisance regressor (motion, WM, CSF)\n"
+		    paste -d " "	${subID}/func/${jsonID}.par \
+		       				${epiname}_regressor_wm.txt \
+		       				${epiname}_regressor_csf.txt > ${epiname}_nuisance.txt;
+		    ;;
+	esac	    
+	# Regression of nuisance matrix
+	printf "\tRegression of nuisance signals\n"
+	$FSLDIR/bin/fsl_glm	-i ${epiimg} \
+					-d ${epiname}_nuisance.txt \
+					-o ${epiname}_nuisance_betas \
+					-m ${brainmask} \
+					--out_res=${epiimg} --demean;
 
-	    # Switch deweighting of motion outliers
-	    case "${runmot}" in
-	    	y)
-			    # Compose full matrix of regressors (if motout exists)
-			    if [ -f $SUBDIR/func/${jsonname}_motout.txt ]; then
-			        printf "\tComposing nuisance regressor (motion, outliers, WM, CSF)\n"
-			        paste -d " " 	$SUBDIR/func/${jsonname}.par \
-			        				$SUBDIR/func/${jsonname}_motout.txt \
-			        				${epiname}_wmregressor.txt \
-			        				${epiname}_csfregressor.txt > ${epiname}_nuisance.txt;
-			    else
-			    	# Use only motion parameters and tissue-based regressors
-	    			printf "\tMotion outliers info not available\n"
-			        printf "\tComposing nuisance regressor (motion, WM, CSF)\n"
-			        paste -d " "	$SUBDIR/func/${jsonname}.par \
-			        				${epiname}_wmregressor.txt \
-			        				${epiname}_csfregressor.txt > ${epiname}_nuisance.txt;
-			    fi
-			    ;;
-			n)
-				# Regress motion and tissue-based regressors
-	    		printf "\tMotion outliers deweighting disabled\n"
-	    		printf "\tComposing nuisance regressor (motion, WM, CSF)\n"
-			    paste -d " "	$SUBDIR/func/${jsonname}.par \
-			       				${epiname}_wmregressor.txt \
-			       				${epiname}_csfregressor.txt > ${epiname}_nuisance.txt;
-			    ;;
-		esac	    
-	    # Regression of nuisance matrix
-	    printf "\tRegression of nuisance signals\n"
-	    $FSLDIR/bin/fsl_glm	-i ${epiimg} \
-	    					-d ${epiname}_nuisance.txt \
-	    					-o ${epiname}_nuisance_betas \
-	    					-m ${brainmask} \
-	    					--out_res=${epiimg} --demean;
+	#echo "${g}: Noise reduction"
+	#$FSLDIR/bin/susan $epiimg -1 0.6 3 1 1 ${brainmask} -1 $epiimg
 
-	    #echo "${g}: Noise reduction"
-	    #$FSLDIR/bin/susan $epiimg -1 0.6 3 1 1 ${brainmask} -1 $epiimg
-
-	    # If it's NOT a task-based scan, apply bandpass filtering
-	    if [[ ${scanname} != *"task"* ]]; then
-	    		OUTNAME="${outpath}/${SUBDIR}_bold_rest"
-	    		hp=$(echo 100/2/$TR | bc -l)   #0.01Hz, sigma: 1/(2*f*TR)	as reported in fsl mailing list
-	    		lp=-1    #0.1Hz - check it after computing the spectrum, see below
-	    		printf "\tBandpass filtering (hp=%s, lp=%s\n" "${hp}" "${lp}"
-	    		$FSLDIR/bin/fslmaths $epiimg -bptf $hp $lp $OUTNAME
-	    		#Compute frequency spectrum
-	    		printf "\tCompute Spectrum\n"
-	    		$FSLDIR/bin/fslpspec $OUTNAME ${OUTNAME}_spectrum
-	    		$FSLDIR/bin/fslmeants -i ${OUTNAME}_spectrum -o ${OUTNAME}_spectrum.txt #-m ${g}_brainmask 
-	    		Len=$(cat ./${OUTNAME}_spectrum.txt | wc -l )
-	    		Nyq=$(echo "0.5/2/$Len" | bc -l)
-	    		$FSLDIR/bin/fsl_tsplot	-i ${OUTNAME}_spectrum.txt \
-	    								-u $Nyq \
-	    								-y "Power" -x "Frequency (Hz)" \
-	    								-t 'Power Spectrum' \
-	    								-a pow -w 640 -h 144 \
-	    								--ymin=0 --ymax=1000000 \
-	    								-o ${OUTNAME}_spectrum.png;
-	    		printf "\tDONE.\n\n"
-	    	#otherwise skip this step
-	    	else
-	    		OUTNAME="${outpath}/${SUBDIR}_bold_task"
-	    		$FSLDIR/bin/fslmaths $epiimg -mul 1 $OUTNAME
-	    		printf "\tTask-based timeseries: skipping bandpass filter\n\n"
-	    fi
-	 	
-	 	#Warping of filtered data to MNI space
-	 	printf "\tFinal warping of EPI to MNI\n\n"
-		$FSLDIR/bin/applywarp	-i ${OUTNAME} \
-								-r ${std} \
-								-w ${epiname}_warp2MNI.nii.gz \
-								--interp=spline \
-								-o ${OUTNAME}-MNI.nii.gz;
+	# If it's NOT a task-based scan, apply bandpass filtering
+	if [[ ${nameID} != *"task"* ]]; then
+		printf -v sesID "ses-%02d" "${subcount}"
+		printf -v outname -- "${outpath}/${subID}_${sesID}_bold_rest"
 		
-		#Create smoothed version of subj- and std-space timeseries
-		printf "\tSpatial smoothing\n"
-	    $FSLDIR/bin/fslmaths ${OUTNAME} -kernel gauss 3 -fmean ${OUTNAME}-smooth
-	    $FSLDIR/bin/fslmaths ${OUTNAME}-MNI -kernel gauss 3 -fmean ${OUTNAME}-MNI-smooth
-	    #Set GM mask as weighting file?
+		#Compute frequency spectrum
+		printf "\tCompute Spectrum before BPF\n"
+		$FSLDIR/bin/fslpspec $epiimg ${epiname}-spectrum_pre
+		$FSLDIR/bin/fslmeants -i ${epiname}-spectrum_pre -o ${epiname}-spectrum_pre.txt  -m ${gmstruc} -w
 
-	    #Run single-subject ICA [otional]
-	    case "${runica}" in
-	    	y)
-   				comp=40
-   				printf "\tRunning ICA (n=${comp})\n"
-   				$FSLDIR/bin/melodic -i ${OUTNAME}-smooth \
-   									-o ${OUTNAME}-smooth.ica \
-   									--nobet --tr=$TR --mmthresh=0.66 \
-   									-d ${comp} \
-   								-m ${brainmask} \
-   								--report -v;
-   				;;
-   			n)
-   				printf "\tSkipping SS-ICA\n"
-				;;
-		esac
+		# Set BPF cutoff values
+		hp=$( echo "scale=3;1/(2*0.01*${TR})" | bc )	#0.01Hz, sigma: 1/(2*f*TR) as reported in fsl mailing list
+		lp=$( echo "scale=3;1/(2*0.3*${TR})" | bc)	#0.3Hz - check it after computing the spectrum
+		
+		# BP filtering
+		printf "\tBandpass filtering (hp=%s, lp=%s)\n" "${hp}" "${lp}"
+		$FSLDIR/bin/fslmaths $epiimg -bptf $hp $lp ${outname}
+		
+		#Compute frequency spectrum
+		printf "\tCompute Spectrum after BPF\n"
+		$FSLDIR/bin/fslpspec ${outname} ${outname}-spectrum
+		$FSLDIR/bin/fslmeants -i ${outname}-spectrum -o ${outname}-spectrum.txt  -m ${gmstruc} -w
+		dim=$(cat ${outname}-spectrum.txt | wc -l )
+		nyq=$(echo "0.5/${TR}/${dim}" | bc -l )
+		printf "${nyq} ${subID} ${sesID} ${TR}" > ${outname}-spectraspecs.txt
+		paste -d " " ${epiname}-spectrum_pre.txt ${outname}-spectrum.txt > ${outname}-spectra.txt
+		# Plot spectra
+		$FSLDIR/bin/fsl_tsplot	-i ${outname}-spectra.txt \
+								-u $nyq \
+								-y "Power" -x "Frequency (Hz)" \
+								-t "${subID}_${sesID} - GMw Power Spectrum - TR(s): ${TR}" \
+								-a raw,bpf -w 660 -h 220 \
+								--ymin=0 --ymax=1.5e+6 \
+								--start=1 --finish=2 \
+								-o ${outname}-spectra.png;
+	#otherwise skip this step
+	else
+		printf -v outname -- "${outpath}/${subID}_ses-%02d_bold_task" "${subcount}"
+		$FSLDIR/bin/fslmaths $epiimg -mul 1 $outname
+		printf "\tTask-based timeseries: skipping bandpass filter\n\n"
+	fi
 
-		#Clean up directory
-   		mkdir -p ${outpath}/lnifmri_prep_files
-		mv ${epiname}*.* ${outpath}/lnifmri_prep_files/
+	#Warping of filtered data to MNI space
+	printf "\tFinal warping of EPI to MNI\n"
+	$FSLDIR/bin/applywarp	-i ${outname} \
+							-r ${std} \
+							-w ${epiname}_warp2MNI.nii.gz \
+							--interp=spline \
+							-o ${outname}-MNI.nii.gz;
 
-	done #for epiimg
-done #for SUBDIR
+	#Create smoothed version of subj- and std-space timeseries
+	printf "\tSpatial smoothing\n"
+	$FSLDIR/bin/fslmaths ${outname} -kernel gauss 3 -fmean ${outname}-smooth
+	$FSLDIR/bin/fslmaths ${outname}-MNI -kernel gauss 3 -fmean ${outname}-MNI-smooth
+	#Set GM mask as weighting file?
+
+	#Run single-subject ICA [otional]
+	case "${runica}" in
+		y)
+			comp=40
+			printf "\tRunning ICA (n=${comp})\n"
+			$FSLDIR/bin/melodic	-i ${outname}-smooth \
+								-o ${outname}-smooth.ica \
+								--nobet --tr=$TR --mmthresh=0.66 \
+								-d ${comp} \
+								-m ${brainmask} \
+								--report -v &
+			;;
+		n)
+			printf "\tSkipping SS-ICA\n"
+			;;
+	esac
+
+	printf "\tDONE.\n\n"
+done
 
 duration=$SECONDS
 printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."

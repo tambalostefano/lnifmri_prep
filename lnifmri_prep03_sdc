@@ -79,370 +79,307 @@ SECONDS=0
 QCDIR=`pwd`/qc
 #printf $QCDIR
 
+Start
+
 #Wait for 01_anat and 02_preproc to finish
 while true; do
-	stamp=`date +'%T'`
-	printf "\t%s: Waiting for greenlight from 01_anat and 02_preproc\n" "${stamp}"
-	sleep 60
+	stamp=`date +%Y%m%d_%H%M%S`
+	printf "\t%s: Waiting greenlight from 01_anat and 02_preproc\n" "${stamp}"
+	sleep 180
 
-	if [[ -f ./lnifmri_prep01_greenlight.txt  && -f ./lnifmri_prep02_greenlight.txt ]]; then
-		stamp=`date +'%T'`
+	if [[ -f ./.lnifmri_prep01_greenlight.txt  && -f ./.lnifmri_prep02_greenlight.txt ]]; then
+		stamp=`date +%Y%m%d_%H%M%S`
 		printf "\t%s: Greenlight from 01_anat and 02_preproc: starting SDC process\n" "${stamp}"
 		break
   	fi
 done
 
-Start
-
 # for SUBDIR in sub-*[0-9] ; do
-for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
-	
-	printf -v STR "${SUBDIR}_ses-01_T1w"
+for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
+    epiname=$($FSLDIR/bin/remove_ext ${epiimg})
+    
+    readarray -d / -t fileparts <<< "${epiimg}"
+    nid=$((${#fileparts[@]}-1))
+    sid=$((${#fileparts[@]}-3))
+    nameID=$(echo ${fileparts[${nid}]})
+    subID=$(echo ${fileparts[${sid}]})
+    nameIDnoext=$($FSLDIR/bin/remove_ext ${nameID})
 
 	#define different images/masks to load
-	t1struc=$SUBDIR/$STR.anat/T1_biascorr.nii.gz
-	bstruc=$SUBDIR/$STR.anat/T1_biascorr_brain.nii.gz
-	wmstruc=$SUBDIR/$STR.anat/T1_wmedge.nii.gz
-	csfstruc=$SUBDIR/$STR.anat/T1_csfedge.nii.gz
-	brainmask=$SUBDIR/$STR.anat/T1_biascorr_brain_mask.nii.gz
+	printf -v STR "${subID}_ses-01_T1w"
+	t1struc=${subID}/$STR.anat/T1_biascorr.nii.gz
+	bstruc=${subID}/$STR.anat/T1_biascorr_brain.nii.gz
+	wmstruc=${subID}/$STR.anat/T1_wmedge.nii.gz
+	csfstruc=${subID}/$STR.anat/T1_csfedge.nii.gz
+	brainmask=${subID}/$STR.anat/T1_biascorr_brain_mask.nii.gz
 	std=$FSLDIR/data/standard/MNI152_T1_2mm.nii.gz
+	
+	# Run SDC preparation only once per subID
+	if [ ! -e ${subID}/sdc/lnifmri_prep03_greenlight.txt ]; then
+		# #################################################################################################
+		# PREPARE FIELDMAP
+		if 	[ -e ${subID}/sdc/*gre_field_mapping*e1.nii.gz -a -e ${subID}/sdc/*gre_field_mapping*e2.nii.gz -a -e ${subID}/sdc/*gre_field_mapping*ph.nii.gz ]; then
+			printf "\tPreparing fielmap\n"
+			runfmap=1
+			#Set array to store Echo Times
+			declare ediff
 
-	# #################################################################################################
-	# PREPARE FIELDMAP
-	# shopt -s nullglob
-	# set -- $SUBDIR/sdc/*gre_field_mapping*e[12].nii.gz
-	# if ls $SUBDIR/sdc/*gre_field_mapping*e[12].nii.gz 1> /dev/null 2>&1; then
-	if 	[ -e $SUBDIR/sdc/*gre_field_mapping*e1.nii.gz -a -e $SUBDIR/sdc/*gre_field_mapping*e2.nii.gz -a -e $SUBDIR/sdc/*gre_field_mapping*ph.nii.gz ]; then
-		printf "\tPreparing fielmap\n"
-		runfmap=1
-		#Set array to store Echo Times
-		declare ediff
+			#Process Magnitude GRE dataset
+			for n in `$FSLDIR/bin/imglob ${subID}/sdc/*gre_field_mapping*_e[12].nii.gz` ; do
+			    g=`$FSLDIR/bin/remove_ext ${n}`
 
-		#Process Magnitude GRE dataset
-		for n in `$FSLDIR/bin/imglob $SUBDIR/sdc/*gre_field_mapping*_e[12].nii.gz` ; do
-		    g=`$FSLDIR/bin/remove_ext ${n}`
+				printf "\tReformat JSON file\n"
+	    	    cat ${g}.json | tr -d '\n' > ${g}_temp1.json
+	       		sed 's/,\t\"/,\n\"/g' ${g}_temp1.json > ${g}_temp2.json
+	       	 	cat ${g}_temp2.json | tr -d '\t' > ${g}_parameters.json
 
-			printf "\tReformat JSON file\n"
-    	    cat ${g}.json | tr -d '\n' > ${g}_temp1.json
-       		sed 's/,\t\"/,\n\"/g' ${g}_temp1.json > ${g}_temp2.json
-       	 	cat ${g}_temp2.json | tr -d '\t' > ${g}_parameters.json
+			    printf "\tRunning BET on ${n}\n"
+			    $FSLDIR/bin/bet $n ${g}_brain \
+			    	-f 0.4 \
+			    	-g 0.1 \
+			    	-R;
+			    #Erode brain-extracted image to exclude noisy voxels
+			    $FSLDIR/bin/fslmaths ${g}_brain -ero ${g}_brain_eroded
+				#Parse EchoTime from JSON
+				etime=$(awk '$1 ~ /"EchoTime"/ {print $2}' ${g}_parameters.json | tr -d ',')
+			    ediff+=(${etime})
+			done
 
-		    printf "\tRunning BET on ${n}\n"
-		    $FSLDIR/bin/bet $n ${g}_brain \
-		    	-f 0.4 \
-		    	-g 0.1 \
-		    	-R;
-		    #Erode brain-extracted image to exclude noisy voxels
-		    $FSLDIR/bin/fslmaths ${g}_brain -ero ${g}_brain_eroded
-			#Parse EchoTime from JSON
-			etime=$(awk '$1 ~ /"EchoTime"/ {print $2}' ${g}_parameters.json | tr -d ',')
-		    ediff+=(${etime})
-		done
+			#Set arguments for fsl_prepare_fieldmap
+			phaimg=`$FSLDIR/bin/imglob ${subID}/sdc/*gre_field_mapping*ph.nii.gz`
 
-		#Set arguments for fsl_prepare_fieldmap
-		phaimg=`$FSLDIR/bin/imglob $SUBDIR/sdc/*gre_field_mapping*ph.nii.gz`
+			#Consider 1st echo of magnitude image (higher SNR)
+			magbrain=`$FSLDIR/bin/imglob ${subID}/sdc/*gre_field_mapping*e1_brain_eroded.nii.gz`
+			magimg=`$FSLDIR/bin/imglob ${subID}/sdc/*gre_field_mapping*e1.nii.gz`
+			fmap="${subID}/sdc/ep2d_fmap_fieldmap"
 
-		#Consider 1st echo of magnitude image (higher SNR)
-		magbrain=`$FSLDIR/bin/imglob $SUBDIR/sdc/*gre_field_mapping*e1_brain_eroded.nii.gz`
-		magimg=`$FSLDIR/bin/imglob $SUBDIR/sdc/*gre_field_mapping*e1.nii.gz`
-		fmap="$SUBDIR/sdc/ep2d_fmap_fieldmap"
+			#Compute echo time difference
+			echdif=`echo "(${ediff[1]} - ${ediff[0]})*1000" | bc -l`
 
-		#Compute echo time difference
-		echdif=`echo "(${ediff[1]} - ${ediff[0]})*1000" | bc -l`
+			#Derive Fieldmap
+			printf "\tRunning fieldmap estimation with EchoTime diff: ${echdif}\n\n"
+			$FSLDIR/bin/fsl_prepare_fieldmap SIEMENS $phaimg $magbrain $fmap $echdif
+		else
+			runfmap=0
+			printf "\n\tFieldmap data incomplete or not available.\n"
+		fi
 
-		#Derive Fieldmap
-		printf "\tRunning fieldmap estimation with EchoTime diff: ${echdif}\n\n"
-		$FSLDIR/bin/fsl_prepare_fieldmap SIEMENS $phaimg $magbrain $fmap $echdif
-	else
-		runfmap=0
-		printf "\n\tFieldmap data incomplete or not available.\n"
+		#################################################################################################
+		# PREPARE AP/PA FOR TOPUP
+		if 	[ -e ${subID}/sdc/*ep2d_se_distcorr_AP_*.nii.gz -a -e ${subID}/sdc/*ep2d_se_distcorr_PA_*.nii.gz ]; then
+			printf "\n\tPreparing config file for topup\n"
+			runtopup=1
+			#Default parameters config-file for topup
+			cnf="${subID}/sdc/ep2d_topup_cfgpars.cnf"
+			cnfname=`basename ${cnf} .cnf`
+			#Print config-file
+			printf "$arg" > ${cnf}
+
+			printf "\tMerging opposite phase encoding SE-EPI\n\n"
+			$FSLDIR/bin/fslmerge -t ${subID}/sdc/ep2d_topup_fieldmap `ls -d1 ${subID}/sdc/*ep2d_se_distcorr*.nii.gz`
+		else
+			runtopup=0
+			printf "\n\tAP/PA SE data incomplete or not available.\n\n"
+		fi
+
+		# Mark SDC preparation as complete
+		stamp=`date +%Y%m%d_%H%M%S`
+		printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${stamp}" > ${subID}/sdc/lnifmri_prep03_greenlight.txt
 	fi
-
-	#################################################################################################
-	# PREPARE AP/PA FOR TOPUP
-	# shopt -s nullglob
-	# set -- $SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz
-	# if ls $SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz 1> /dev/null 2>&1; then
-	if 	[ -e $SUBDIR/sdc/*ep2d_se_distcorr_AP_*.nii.gz -a -e $SUBDIR/sdc/*ep2d_se_distcorr_PA_*.nii.gz ]; then
-		printf "\n\tPreparing config file for topup\n"
-		runtopup=1
-		#Default parameters config-file for topup
-		cnf="$SUBDIR/sdc/ep2d_topup_cfgpars.cnf"
-		cnfname=`basename ${cnf} .cnf`
-		#Print config-file
-		printf "$arg" > ${cnf}
-
-		printf "\tMerging opposite phase encoding SE-EPI\n\n"
-		$FSLDIR/bin/fslmerge -t $SUBDIR/sdc/ep2d_topup_fieldmap `ls -d1 $SUBDIR/sdc/*ep2d_se_distcorr*.nii.gz`
-	else
-		runtopup=0
-		printf "\n\tAP/PA SE data incomplete or not available.\n\n"
-	fi
-
 	#################################################################################################
 	# UNWARPING OF EPI
-	for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do
+	#Load bold EPI scan
+	epivol="${epiname}_SINGLEVOL"
+	$FSLDIR/bin/fslroi ${epiimg} ${epivol} 30 1
+	
+	printf "\tScan Name: ${subID} - ${nameID}\n"
 
-		#Load bold EPI scan
-		scanname=`basename ${epiimg}`
-		epiname=`$FSLDIR/bin/remove_ext ${epiimg}`
-		epivol="${epiname}_SINGLEVOL"
-		$FSLDIR/bin/fslroi ${epiimg} ${epivol} 30 1
+	#Extract core parameters from JSON
+	# echosp=$(cat ${epiname}.json | sed 's/.*"DerivedVendorReportedEchoSpacing": \(.*\),.*/\1/;t;d')
+	# phenc=$(cat ${epiname}.json | sed 's/.*"PhaseEncodingDirection": "\(.*\)".*/\1/;t;d')
+	
+	echosp=$(awk '$1 ~ /"DerivedVendorReportedEchoSpacing"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+    phenc=$(awk '$1 ~ /"PhaseEncodingDirection"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+	
+	# echo ${phenc}
+
+	[ $phenc == "\"j-\"" ] \
+		&& pedir="-y" \
+		|| pedir="y";
 		
-		printf "\tScan Name: $scanname\n\tEpi Name: $epiname\n"
+	# case ${phenc} in
+	# 	#AP
+	# 	"j-")
+	# 		pedir="-y"
+	# 	;;
+	# 	#PA
+	# 	"j")
+	# 		pedir="y"
+	# 	;;
+	# esac
 
+	# echo ${pedir}
+
+	##########################################################################################
+	#
+	#	Fieldmap method
+	#
+	##########################################################################################
+
+	if [[ "${runfmap}" -eq "0" ]]; then
+		printf "\n\tSkipping Fieldmap unwarping\n";
+	else
+		[ ! -d ${subID}/func/sdc_fmp ] && { mkdir -m 777 ${subID}/func/sdc_fmp; }
+		FMAPDIR=${subID}/func/sdc_fmp
+		printf "\n\tSaving fieldmap unwarped data to: $FMAPDIR\n"
+		#Select 1st volume of EPI timeseries to reduce processing time
+		#$FSLDIR/bin/fslroi ${epiimg} ${epivol} 30 1
+
+		#Call epi_reg w/fieldmap est. (Single step)
+		printf "\tRunning epi_reg\n\n"
+		$FSLDIR/bin/epi_reg	--echospacing=${echosp} \
+							--wmseg=${wmstruc} \
+							--fmap=${fmap} \
+							--fmapmag=${magimg} \
+							--fmapmagbrain=${magbrain} \
+							--pedir=${pedir} \
+							--epi=${epivol} \
+							--t1=${t1struc} \
+							--t1brain=${bstruc} \
+							--out=$FMAPDIR/${nameIDnoext};
+
+		# #Calculate Jacobian coefficient of epi_reg warp to T1
+		# $FSLDIR/bin/fnirtfileutils -i ${epiname}_fmap_epireg_warp \
+		# 	-r ${t1struc} \
+		# 	-f spline \
+		# 	-o ${epiname}_fmap_epireg_warpcoeff;
+		# $FSLDIR/bin/fnirtfileutils -i ${epiname}_fmap_epireg_warpcoeff \
+		# 	-j ${epiname}_fmap_epireg_warpjac;
+
+		printf "\n\tWarping EPI to T1\n"
+		$FSLDIR/bin/applywarp	-i ${epiimg} \
+								-r ${t1struc} \
+								-w $FMAPDIR/${nameIDnoext}_warp.nii.gz \
+								--interp=spline \
+								-o $FMAPDIR/${nameIDnoext};
+		$FSLDIR/bin/fslroi $FMAPDIR/${nameIDnoext} ${epiname}_fmap_checkwarpedtostruc 30 1
+		printf "${epiname}_fmap_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
+
+		##########################################################################################
+		#
+		#	EPI to MNI
+		#
+		##########################################################################################	
+		#Warping 4D EPI in standard (2mm MNI) space
+		printf "\tCreating EPI to MNI composite warps\n"
+		$FSLDIR/bin/convertwarp	-r ${std} \
+								--warp1=$FMAPDIR/${nameIDnoext}_warp \
+								--warp2=${subID}/${STR}.anat/T1_to_MNI_nonlin_field.nii.gz \
+								-j $FMAPDIR/${nameIDnoext}_jac2MNI.nii.gz \
+								-o $FMAPDIR/${nameIDnoext}_warp2MNI.nii.gz;
+
+		# printf "\tWarping EPI to MNI\n"
+		# $FSLDIR/bin/applywarp	-i ${epiimg} \
+		# 						-r ${std} \
+		# 						-w $FMAPDIR/${nameIDnoext}_warp2MNI.nii.gz \
+		# 						--interp=spline \
+		# 						-o $FMAPDIR/${nameIDnoext}_wrp2std.nii.gz;
+		# $FSLDIR/bin/fslroi $FMAPDIR/${nameIDnoext}_wrp2std ${epiname}_fmap_checkwarpedtostd 30 1
+
+		printf "\tWarping EPI to MNI\n"
+		$FSLDIR/bin/applywarp	-i ${epivol} \
+								-r ${std} \
+								-w $FMAPDIR/${nameIDnoext}_warp2MNI.nii.gz \
+								--interp=spline \
+								-o ${epiname}_fmap_checkwarpedtostd;
+		#$FSLDIR/bin/fslroi $FMAPDIR/${nameIDnoext}_wrp2std ${epiname}_fmap_checkwarpedtostd 30 1
+
+		printf "\tFieldmap SDC DONE.\n"
+	fi
+
+	##########################################################################################
+	#
+	#	AP/PA method
+	#
+	##########################################################################################
+
+	if [[ "${runtopup}" -eq "0" ]]; then
+		printf "\n\tSkipping Topup unwarping\n";
+	else
+		[ ! -d ${subID}/func/sdc_tup ] && { mkdir -m 777 ${subID}/func/sdc_tup; }
+		TUPDIR=${subID}/func/sdc_tup
+		printf "\n\tSaving TOPUP unwarped data to: $TUPDIR\n"
 		#Extract core parameters from JSON
-		# echosp=$(cat ${epiname}.json | sed 's/.*"DerivedVendorReportedEchoSpacing": \(.*\),.*/\1/;t;d')
-		# phenc=$(cat ${epiname}.json | sed 's/.*"PhaseEncodingDirection": "\(.*\)".*/\1/;t;d')
-		
-		echosp=$(awk '$1 ~ /"DerivedVendorReportedEchoSpacing"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
-        phenc=$(awk '$1 ~ /"PhaseEncodingDirection"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
-		
-		# echo ${phenc}
+		# acqmtxpe=$(cat ./${epiname}.json | sed 's/.*"AcquisitionMatrixPE": \(.*\),.*/\1/;t;d')
+		acqmtxpe=$(awk '$1 ~ /"AcquisitionMatrixPE"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+		totreadtime=`echo "scale=4;${echosp}*(${acqmtxpe}-1)" | bc -l`
+
+		#Write config-file for topup
+		par="$TUPDIR/${nameIDnoext}_blipudpars.par"
 
 		[ $phenc == "\"j-\"" ] \
-			&& pedir="-y" \
-			|| pedir="y";
-			
-		# case ${phenc} in
+			&& printf "0 -1 0 ${totreadtime}\n0 1 0 ${totreadtime}\n" >> ${par} \
+			|| printf "0 1 0 ${totreadtime}\n0 -1 0 ${totreadtime}\n" >> ${par};
+
+		# case $phenc in
 		# 	#AP
 		# 	"j-")
-		# 		pedir="-y"
+		# 		#pedir="-y"
+		# 		printf "0 -1 0 ${totreadtime}\n0 1 0 ${totreadtime}\n" >> ${par}
 		# 	;;
 		# 	#PA
 		# 	"j")
-		# 		pedir="y"
+		# 		#pedir="y"
+		# 		printf "0 1 0 ${totreadtime}\n0 -1 0 ${totreadtime}\n" >> ${par}
 		# 	;;
 		# esac
 
-		# echo ${pedir}
+		printf "\tRunning topup\n"
+		$FSLDIR/bin/topup	--imain=${subID}/sdc/ep2d_topup_fieldmap.nii.gz \
+							--datain=${par} \
+							--config=${cnf} \
+							--out=$TUPDIR/${nameIDnoext} \
+							--iout=$TUPDIR/${nameIDnoext}_unw \
+							--fout=$TUPDIR/${nameIDnoext}_field;
+		#Hz to rad/s
+		printf "\tConverting FMAP values: Hz -> rad/s\n"
+		$FSLDIR/bin/fslmaths $TUPDIR/${nameIDnoext}_field -mul 6.2832 $TUPDIR/${nameIDnoext}_field_rads
+	    $FSLDIR/bin/fslroi $TUPDIR/${nameIDnoext}_unw $TUPDIR/${nameIDnoext}_unw_SINGLEVOL 0 1
+	    $FSLDIR/bin/bet	$TUPDIR/${nameIDnoext}_unw_SINGLEVOL $TUPDIR/${nameIDnoext}_unw_SINGLEVOL_brain \
+	    				-f 0.4 \
+	    				-g 0.1 \
+	    				-R;
+	    #Erode brain-extracted image to exclude noisy voxels
+	    $FSLDIR/bin/fslmaths $TUPDIR/${nameIDnoext}_unw_SINGLEVOL_brain -ero $TUPDIR/${nameIDnoext}_unw_SINGLEVOL_brain_eroded
 
-		##########################################################################################
-		#
-		#	Fieldmap method
-		#
-		##########################################################################################
-
-		if [[ "${runfmap}" -eq "0" ]]; then
-			printf "\n\tSkipping Fieldmap unwarping\n";
-		else
-			mkdir -m 777 $SUBDIR/func/sdc_fmp
-			FMAPDIR=$SUBDIR/func/sdc_fmp
-			printf "\n\tSaving fieldmap unwarped data to: $FMAPDIR\n"
-			#Select 1st volume of EPI timeseries to reduce processing time
-			#$FSLDIR/bin/fslroi ${epiimg} ${epivol} 30 1
-
-			#Call epi_reg w/fieldmap est. (Single step)
-			printf "\tRunning epi_reg\n\n"
-			$FSLDIR/bin/epi_reg	--echospacing=${echosp} \
-								--wmseg=${wmstruc} \
-								--fmap=${fmap} \
-								--fmapmag=${magimg} \
-								--fmapmagbrain=${magbrain} \
-								--pedir=${pedir} \
-								--epi=${epivol} \
-								--t1=${t1struc} \
-								--t1brain=${bstruc} \
-								--out=$FMAPDIR/${scanname};
-
-			# #Calculate Jacobian coefficient of epi_reg warp to T1
-			# $FSLDIR/bin/fnirtfileutils -i ${epiname}_fmap_epireg_warp \
-			# 	-r ${t1struc} \
-			# 	-f spline \
-			# 	-o ${epiname}_fmap_epireg_warpcoeff;
-			# $FSLDIR/bin/fnirtfileutils -i ${epiname}_fmap_epireg_warpcoeff \
-			# 	-j ${epiname}_fmap_epireg_warpjac;
-
-			printf "\n\tWarping EPI to T1\n"
-			$FSLDIR/bin/applywarp	-i ${epiimg} \
-									-r ${t1struc} \
-									-w $FMAPDIR/${scanname}_warp.nii.gz \
-									--interp=spline \
-									-o $FMAPDIR/${scanname};
-			$FSLDIR/bin/fslroi $FMAPDIR/${scanname} ${epiname}_fmap_checkwarpedtostruc 30 1
-			printf "${epiname}_fmap_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
-
-			##########################################################################################
-			#
-			#	EPI to MNI
-			#
-			##########################################################################################	
-			#Warping 4D EPI in standard (2mm MNI) space
-			printf "\tCreating EPI to MNI composite warps\n"
-			$FSLDIR/bin/convertwarp	-r ${std} \
-									--warp1=$FMAPDIR/${scanname}_warp \
-									--warp2=$SUBDIR/${STR}.anat/T1_to_MNI_nonlin_field.nii.gz \
-									-j $FMAPDIR/${scanname}_jac2MNI.nii.gz \
-									-o $FMAPDIR/${scanname}_warp2MNI.nii.gz;
-
-			# printf "\tWarping EPI to MNI\n"
-			# $FSLDIR/bin/applywarp	-i ${epiimg} \
-			# 						-r ${std} \
-			# 						-w $FMAPDIR/${scanname}_warp2MNI.nii.gz \
-			# 						--interp=spline \
-			# 						-o $FMAPDIR/${scanname}_wrp2std.nii.gz;
-			# $FSLDIR/bin/fslroi $FMAPDIR/${scanname}_wrp2std ${epiname}_fmap_checkwarpedtostd 30 1
-
-			printf "\tWarping EPI to MNI\n"
-			$FSLDIR/bin/applywarp	-i ${epivol} \
-									-r ${std} \
-									-w $FMAPDIR/${scanname}_warp2MNI.nii.gz \
-									--interp=spline \
-									-o ${epiname}_fmap_checkwarpedtostd;
-			#$FSLDIR/bin/fslroi $FMAPDIR/${scanname}_wrp2std ${epiname}_fmap_checkwarpedtostd 30 1
-
-			printf "\tFieldmap SDC DONE.\n"
-		fi
-	
-		##########################################################################################
-		#
-		#	AP/PA method
-		#
-		##########################################################################################
-
-		if [[ "${runtopup}" -eq "0" ]]; then
-			printf "\n\tSkipping Topup unwarping\n";
-		else
-			mkdir -m 777 $SUBDIR/func/sdc_tup
-			TUPDIR=$SUBDIR/func/sdc_tup
-			printf "\n\tSaving TOPUP unwarped data to: $TUPDIR\n"
-			#Extract core parameters from JSON
-			# acqmtxpe=$(cat ./${epiname}.json | sed 's/.*"AcquisitionMatrixPE": \(.*\),.*/\1/;t;d')
-			acqmtxpe=$(awk '$1 ~ /"AcquisitionMatrixPE"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
-			totreadtime=`echo "scale=4;${echosp}*(${acqmtxpe}-1)" | bc -l`
-
-			#Write config-file for topup
-			par="$TUPDIR/${scanname}_blipudpars.par"
-
-			[ $phenc == "\"j-\"" ] \
-				&& printf "0 -1 0 ${totreadtime}\n0 1 0 ${totreadtime}\n" >> ${par} \
-				|| printf "0 1 0 ${totreadtime}\n0 -1 0 ${totreadtime}\n" >> ${par};
-
-			# case $phenc in
-			# 	#AP
-			# 	"j-")
-			# 		#pedir="-y"
-			# 		printf "0 -1 0 ${totreadtime}\n0 1 0 ${totreadtime}\n" >> ${par}
-			# 	;;
-			# 	#PA
-			# 	"j")
-			# 		#pedir="y"
-			# 		printf "0 1 0 ${totreadtime}\n0 -1 0 ${totreadtime}\n" >> ${par}
-			# 	;;
-			# esac
-
-			printf "\tRunning topup\n"
-			$FSLDIR/bin/topup	--imain=$SUBDIR/sdc/ep2d_topup_fieldmap.nii.gz \
-								--datain=${par} \
-								--config=${cnf} \
-								--out=$TUPDIR/${scanname} \
-								--iout=$TUPDIR/${scanname}_unw \
-								--fout=$TUPDIR/${scanname}_field;
-			#Hz to rad/s
-			printf "\tConverting FMAP values: Hz -> rad/s\n"
-			$FSLDIR/bin/fslmaths $TUPDIR/${scanname}_field -mul 6.2832 $TUPDIR/${scanname}_field_rads
-		    $FSLDIR/bin/fslroi $TUPDIR/${scanname}_unw $TUPDIR/${scanname}_unw_SINGLEVOL 0 1
-		    $FSLDIR/bin/bet	$TUPDIR/${scanname}_unw_SINGLEVOL $TUPDIR/${scanname}_unw_SINGLEVOL_brain \
-		    				-f 0.4 \
-		    				-g 0.1 \
-		    				-R;
-		    #Erode brain-extracted image to exclude noisy voxels
-		    $FSLDIR/bin/fslmaths $TUPDIR/${scanname}_unw_SINGLEVOL_brain -ero $TUPDIR/${scanname}_unw_SINGLEVOL_brain_eroded
-
-			printf "\tRunning epi_reg with topup fieldmap\n\n"
-			$FSLDIR/bin/epi_reg	--epi=${epivol} \
-								--t1=${t1struc} \
-								--t1brain=${bstruc} \
-								--wmseg=${wmstruc} \
-								--fmap=$TUPDIR/${scanname}_field_rads \
-								--fmapmag=$TUPDIR/${scanname}_unw_SINGLEVOL \
-								--fmapmagbrain=$TUPDIR/${scanname}_unw_SINGLEVOL_brain_eroded \
-								--echospacing=${echosp} \
-								--pedir=${pedir} \
-								--out=$TUPDIR/${scanname};
-
-			# #Calculate Jacobian coefficient of epi_reg warp to T1
-			# $FSLDIR/bin/fnirtfileutils -i ${epiname}_topup_epireg_warp \
-			# 	-r ${t1struc} \
-			# 	-f spline \
-			# 	-o ${epiname}_topup_epireg_warpcoeff;
-			# $FSLDIR/bin/fnirtfileutils -i ${epiname}_topup_epireg_warpcoeff \
-			# 	-j ${epiname}_topup_epireg_warpjac;
-				
-			printf "\n\tWarping EPI to T1\n"
-			$FSLDIR/bin/applywarp	-i ${epiimg} \
-									-r ${t1struc} \
-									-w $TUPDIR/${scanname}_warp.nii.gz \
-									--interp=spline \
-									-o $TUPDIR/${scanname};
-			$FSLDIR/bin/fslroi $TUPDIR/${scanname} ${epiname}_tup_checkwarpedtostruc 30 1
-			printf "${epiname}_tup_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
-
-			##########################################################################################
-			#
-			#	EPI to MNI
-			#
-			##########################################################################################	
-			printf "\tCreating EPI to MNI composite warps\n"
-			$FSLDIR/bin/convertwarp	-r ${std} \
-									--warp1=$TUPDIR/${scanname}_warp \
-									--warp2=$SUBDIR/${STR}.anat/T1_to_MNI_nonlin_field.nii.gz \
-									-j $TUPDIR/${scanname}_jac2MNI.nii.gz \
-									-o $TUPDIR/${scanname}_warp2MNI.nii.gz;
-
-			# printf "\tWarping EPI to MNI\n"
-			# $FSLDIR/bin/applywarp	-i ${epiimg} \
-			# 						-r ${std} \
-			# 						-w $TUPDIR/${scanname}_warp2MNI.nii.gz \
-			# 						--interp=spline \
-			# 						-o $TUPDIR/${scanname}_wrp2std.nii.gz;
-			# $FSLDIR/bin/fslroi $TUPDIR/${scanname}_wrp2std ${epiname}_tup_checkwarpedtostd 30 1
-
-			printf "\tWarping EPI to MNI\n"
-			$FSLDIR/bin/applywarp	-i ${epivol} \
-									-r ${std} \
-									-w $TUPDIR/${scanname}_warp2MNI.nii.gz \
-									--interp=spline \
-									-o ${epiname}_tup_checkwarpedtostd;
-			#$FSLDIR/bin/fslroi $TUPDIR/${scanname}_wrp2std ${epiname}_tup_checkwarpedtostd 30 1
-
-			printf "\tTOPUP SDC DONE.\n"
-		fi
-		
-		##########################################################################################
-		#
-		#	NO UNWARPING - Only T1 Registration
-		#
-		##########################################################################################
-
-		#RAW (distorted) EPI to T1w
-		mkdir -m 777 $SUBDIR/func/sdc_unc
-		UNCDIR=$SUBDIR/func/sdc_unc
-		printf "\n\tSaving SD UNCORRECTED data to: $UNCDIR\n\n"
-
+		printf "\tRunning epi_reg with topup fieldmap\n\n"
 		$FSLDIR/bin/epi_reg	--epi=${epivol} \
 							--t1=${t1struc} \
 							--t1brain=${bstruc} \
 							--wmseg=${wmstruc} \
-							--out=$UNCDIR/${scanname};
+							--fmap=$TUPDIR/${nameIDnoext}_field_rads \
+							--fmapmag=$TUPDIR/${nameIDnoext}_unw_SINGLEVOL \
+							--fmapmagbrain=$TUPDIR/${nameIDnoext}_unw_SINGLEVOL_brain_eroded \
+							--echospacing=${echosp} \
+							--pedir=${pedir} \
+							--out=$TUPDIR/${nameIDnoext};
 
 		# #Calculate Jacobian coefficient of epi_reg warp to T1
-		# $FSLDIR/bin/fnirtfileutils -i ${epiname}_uncorr_epireg_warp \
+		# $FSLDIR/bin/fnirtfileutils -i ${epiname}_topup_epireg_warp \
 		# 	-r ${t1struc} \
 		# 	-f spline \
-		# 	-o ${epiname}_uncorr_epireg_warpcoeff;
-		# $FSLDIR/bin/fnirtfileutils -i ${epiname}_uncorr_epireg_warpcoeff \
-		# 	-j ${epiname}_uncorr_epireg_warpjac;
-
-		printf "\tRegistration of EPI to T1\n"
-		$FSLDIR/bin/flirt	-in ${epiimg} \
-							-ref ${t1struc} \
-							-applyxfm \
-							-init $UNCDIR/${scanname}.mat \
-							-interp spline \
-							-out $UNCDIR/${scanname};
-		$FSLDIR/bin/fslroi $UNCDIR/${scanname} ${epiname}_unc_checkwarpedtostruc 30 1
-		printf "${epiname}_unc_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
+		# 	-o ${epiname}_topup_epireg_warpcoeff;
+		# $FSLDIR/bin/fnirtfileutils -i ${epiname}_topup_epireg_warpcoeff \
+		# 	-j ${epiname}_topup_epireg_warpjac;
+			
+		printf "\n\tWarping EPI to T1\n"
+		$FSLDIR/bin/applywarp	-i ${epiimg} \
+								-r ${t1struc} \
+								-w $TUPDIR/${nameIDnoext}_warp.nii.gz \
+								--interp=spline \
+								-o $TUPDIR/${nameIDnoext};
+		$FSLDIR/bin/fslroi $TUPDIR/${nameIDnoext} ${epiname}_tup_checkwarpedtostruc 30 1
+		printf "${epiname}_tup_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
 
 		##########################################################################################
 		#
@@ -451,32 +388,96 @@ for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
 		##########################################################################################	
 		printf "\tCreating EPI to MNI composite warps\n"
 		$FSLDIR/bin/convertwarp	-r ${std} \
-								--premat=$UNCDIR/${scanname}.mat \
-								--warp2=$SUBDIR/${STR}.anat/T1_to_MNI_nonlin_field.nii.gz \
-								-j $UNCDIR/${scanname}_jac2MNI.nii.gz \
-								-o $UNCDIR/${scanname}_warp2MNI.nii.gz;
+								--warp1=$TUPDIR/${nameIDnoext}_warp \
+								--warp2=${subID}/${STR}.anat/T1_to_MNI_nonlin_field.nii.gz \
+								-j $TUPDIR/${nameIDnoext}_jac2MNI.nii.gz \
+								-o $TUPDIR/${nameIDnoext}_warp2MNI.nii.gz;
 
 		# printf "\tWarping EPI to MNI\n"
 		# $FSLDIR/bin/applywarp	-i ${epiimg} \
 		# 						-r ${std} \
-		# 						-w $UNCDIR/${scanname}_warp2MNI.nii.gz \
+		# 						-w $TUPDIR/${nameIDnoext}_warp2MNI.nii.gz \
 		# 						--interp=spline \
-		# 						-o $UNCDIR/${scanname}_wrp2std.nii.gz;
-		# $FSLDIR/bin/fslroi $UNCDIR/${scanname}_wrp2std ${epiname}_unc_checkwarpedtostd 30 1
+		# 						-o $TUPDIR/${nameIDnoext}_wrp2std.nii.gz;
+		# $FSLDIR/bin/fslroi $TUPDIR/${nameIDnoext}_wrp2std ${epiname}_tup_checkwarpedtostd 30 1
 
 		printf "\tWarping EPI to MNI\n"
 		$FSLDIR/bin/applywarp	-i ${epivol} \
 								-r ${std} \
-								-w $UNCDIR/${scanname}_warp2MNI.nii.gz \
+								-w $TUPDIR/${nameIDnoext}_warp2MNI.nii.gz \
 								--interp=spline \
-								-o ${epiname}_unc_checkwarpedtostd;
-		#$FSLDIR/bin/fslroi $UNCDIR/${scanname}_wrp2std ${epiname}_unc_checkwarpedtostd 30 1
+								-o ${epiname}_tup_checkwarpedtostd;
+		#$FSLDIR/bin/fslroi $TUPDIR/${nameIDnoext}_wrp2std ${epiname}_tup_checkwarpedtostd 30 1
 
+		printf "\tTOPUP SDC DONE.\n"
+	fi
+	
+	##########################################################################################
+	#
+	#	NO UNWARPING - Only T1 Registration
+	#
+	##########################################################################################
 
-		printf "\tDONE.\n\n"
+	#RAW (distorted) EPI to T1w
+	[ ! -d ${subID}/func/sdc_unc ] && { mkdir -m 777 ${subID}/func/sdc_unc; }
+	UNCDIR=${subID}/func/sdc_unc
+	printf "\n\tSaving SD UNCORRECTED data to: $UNCDIR\n\n"
 
-	done #for epiimg
-done #for SUBDIR
+	$FSLDIR/bin/epi_reg	--epi=${epivol} \
+						--t1=${t1struc} \
+						--t1brain=${bstruc} \
+						--wmseg=${wmstruc} \
+						--out=$UNCDIR/${nameIDnoext};
+
+	# #Calculate Jacobian coefficient of epi_reg warp to T1
+	# $FSLDIR/bin/fnirtfileutils -i ${epiname}_uncorr_epireg_warp \
+	# 	-r ${t1struc} \
+	# 	-f spline \
+	# 	-o ${epiname}_uncorr_epireg_warpcoeff;
+	# $FSLDIR/bin/fnirtfileutils -i ${epiname}_uncorr_epireg_warpcoeff \
+	# 	-j ${epiname}_uncorr_epireg_warpjac;
+
+	printf "\n\tRegistration of EPI to T1\n"
+	$FSLDIR/bin/flirt	-in ${epiimg} \
+						-ref ${t1struc} \
+						-applyxfm \
+						-init $UNCDIR/${nameIDnoext}.mat \
+						-interp spline \
+						-out $UNCDIR/${nameIDnoext};
+	$FSLDIR/bin/fslroi $UNCDIR/${nameIDnoext} ${epiname}_unc_checkwarpedtostruc 30 1
+	printf "${epiname}_unc_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
+
+	##########################################################################################
+	#
+	#	EPI to MNI
+	#
+	##########################################################################################	
+	printf "\tCreating EPI to MNI composite warps\n"
+	$FSLDIR/bin/convertwarp	-r ${std} \
+							--premat=$UNCDIR/${nameIDnoext}.mat \
+							--warp2=${subID}/${STR}.anat/T1_to_MNI_nonlin_field.nii.gz \
+							-j $UNCDIR/${nameIDnoext}_jac2MNI.nii.gz \
+							-o $UNCDIR/${nameIDnoext}_warp2MNI.nii.gz;
+
+	# printf "\tWarping EPI to MNI\n"
+	# $FSLDIR/bin/applywarp	-i ${epiimg} \
+	# 						-r ${std} \
+	# 						-w $UNCDIR/${nameIDnoext}_warp2MNI.nii.gz \
+	# 						--interp=spline \
+	# 						-o $UNCDIR/${nameIDnoext}_wrp2std.nii.gz;
+	# $FSLDIR/bin/fslroi $UNCDIR/${nameIDnoext}_wrp2std ${epiname}_unc_checkwarpedtostd 30 1
+
+	printf "\tWarping EPI to MNI\n"
+	$FSLDIR/bin/applywarp	-i ${epivol} \
+							-r ${std} \
+							-w $UNCDIR/${nameIDnoext}_warp2MNI.nii.gz \
+							--interp=spline \
+							-o ${epiname}_unc_checkwarpedtostd;
+	#$FSLDIR/bin/fslroi $UNCDIR/${nameIDnoext}_wrp2std ${epiname}_unc_checkwarpedtostd 30 1
+
+	printf "\tnonlinreg SDC DONE.\n\n"
+
+done #for epiimg
 
 #Prepare HTML report for struc and std registration of unwarped images
 printf "\tCreating SDC report\n\n"
@@ -487,6 +488,8 @@ ls -d1 `pwd`/sub-*/func/*checkwarpedtostd.nii.gz >> $QCDIR/qc_filelist_check2std
 $FSLDIR/bin/slicesdir -p ${std} `cat $QCDIR/qc_filelist_check2std.txt`
 mv slicesdir $QCDIR/lnifmri_prep_func2std_QC
 printf "\n"
+
+ls -d1 `pwd`/sub-*/func/sdc*/*ep2d_bold*[0-9]_+([0-9]).nii.gz > lnifmri_prep_sdclist.txt
 
 duration=$SECONDS
 printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."

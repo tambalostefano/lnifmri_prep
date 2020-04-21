@@ -45,62 +45,66 @@ stamp=`date +'%T'`
 
 Start
 #for SUBDIR in sub-* ; do
-for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
+# for SUBDIR in `cat lnifmri_prep_anatlist.txt` ; do
 	#Look for T1 or T2w images
-   	subcount=0
-    for s in `$FSLDIR/bin/imglob $SUBDIR/anat/*t[12]_*[0-9]_+([0-9]).nii.gz`; do
-
-        struc=`basename $s`
-        strucname=`$FSLDIR/bin/remove_ext $struc`
-        
+    for anatimg in `cat lnifmri_prep_anatlist.txt`; do
+        subcount=0
+        # struc=`basename $s`
+        anatname=`$FSLDIR/bin/remove_ext $anatimg`
+        readarray -d / -t fileparts <<< "${anatimg}"
+        nid=$((${#fileparts[@]}-1))
+        sid=$((${#fileparts[@]}-3))
+        nameID=$(echo ${fileparts[${nid}]})
+        subID=$(echo ${fileparts[${sid}]})
+ 
         #Resample struc to speed up processing time
-        $FSLDIR/bin/fslmaths ${s} -subsamp2 ${s}_lores
+        $FSLDIR/bin/fslmaths ${anatimg} -subsamp2 ${anatname}_lores
         
         #Check to determine image type (T1/T2)
-        if [[ ${strucname} = *"_t2_"* ]] ;
+        if [[ ${anatname} = *"_t2_"* ]] ;
         	then 
         		type="T2";
 				#Account for multiple strucural images: sub-XX_ses_YY
-        		printf -v LABEL -- "${SUBDIR}_ses-%02d_${type}w" "$(( ++subcount ))"
-   				printf "\n\tProcessing ${type}w: $struc\n\tStored in: ${LABEL}\n"
+        		printf -v LABEL -- "${subID}_ses-%02d_${type}w" "$(( ++subcount ))"
+   				printf "\n\tProcessing ${type}w: ${subID} - ${nameID}\n\tStored in: ${LABEL}\n\n"
         		#Call fsl_anat script (see online FSL reference for detailed description of output)
         		#WARNING! linear and nonlinear registration to MNI is NOT available for T2 images!!
-        		$FSLDIR/bin/fsl_anat    -o ./$SUBDIR/${LABEL} \
+        		$FSLDIR/bin/fsl_anat    -o ./${subID}/${LABEL} \
                 		                --nocrop \
                         		        --noreorient \
                                 		--nosubcortseg \
                                 		--noreg \
                                 		--nononlinreg \
                                 		-t ${type} \
-                                		-i ${s}_lores;
+                                		-i ${anatname}_lores;
         	else
         		type="T1";
 				#Account for multiple strucural images: sub-XX_ses_YY
-        		printf -v LABEL -- "${SUBDIR}_ses-%02d_${type}w" "$(( ++subcount ))"
-   				printf "\n\tProcessing ${type}w: $struc\n\tStored in: ${LABEL}\n"        
+        		printf -v LABEL -- "${subID}_ses-%02d_${type}w" "$(( ++subcount ))"
+   				printf "\n\tProcessing ${type}w: ${subID} - ${nameID}\n\tStored in: ${LABEL}\n\n"        
         		#Call fsl_anat script (see online FSL reference for detailed description of output)
-        		$FSLDIR/bin/fsl_anat    -o ./$SUBDIR/${LABEL} \
+        		$FSLDIR/bin/fsl_anat    -o ./${subID}/${LABEL} \
                 		                --nocrop \
                         		        --noreorient \
                                 		--nosubcortseg \
                                 		-t ${type} \
-                                		-i ${s}_lores;        		
+                                		-i ${anatname}_lores;        		
         fi
 
         #Prepare WM mask
-        $FSLDIR/bin/fslmaths    ./$SUBDIR/${LABEL}.anat/${type}_fast_pve_2.nii.gz \
+        $FSLDIR/bin/fslmaths    ./${subID}/${LABEL}.anat/${type}_fast_pve_2.nii.gz \
                                 -thr 0.5 \
-                                -bin ./$SUBDIR/${LABEL}.anat/${type}_wmedge.nii.gz;
+                                -bin ./${subID}/${LABEL}.anat/${type}_wmedge.nii.gz;
         
         #Prepare CSF msk            
-        $FSLDIR/bin/fslmaths    ./$SUBDIR/${LABEL}.anat/${type}_fast_pve_1.nii.gz \
+        $FSLDIR/bin/fslmaths    ./${subID}/${LABEL}.anat/${type}_fast_pve_0.nii.gz \
                                 -thr 0.5 \
-                                -bin ./$SUBDIR/${LABEL}.anat/${type}_csfedge.nii.gz;
+                                -bin ./${subID}/${LABEL}.anat/${type}_csfedge.nii.gz;
 
         #Prepare GM mask
-        $FSLDIR/bin/fslmaths    ./$SUBDIR/${LABEL}.anat/${type}_fast_pve_0.nii.gz \
+        $FSLDIR/bin/fslmaths    ./${subID}/${LABEL}.anat/${type}_fast_pve_1.nii.gz \
                                 -thr 0.5 \
-                                -bin ./$SUBDIR/${LABEL}.anat/${type}_gmedge.nii.gz;
+                                -bin ./${subID}/${LABEL}.anat/${type}_gmedge.nii.gz;
 
         # #################################################################################################
         # Prepare anatomical reference
@@ -124,12 +128,12 @@ for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
         # $FSLDIR/bin/flirt -in ${bstruc} -ref $FSLDIR/data/standard/MNI152_T1_2mm_brain.nii.gz -dof 12 -out T1toMNIlin.nii.gz -omat T1toMNIlin.mat
         # $FSLDIR/bin/fnirt --in=${struc}_resampled --aff=T1toMNIlin.mat --config=T1_2_MNI152_2mm.cnf --iout=T1toMNInonlin.nii.gz --cout=T1toMNI_coef.nii.gz --fout=T1_to_MNI_nonlin_field.nii.gz
     done
-done #for .sub
+# done #for .sub
 
 duration=$SECONDS
 printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."
-
-printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${stamp}" > lnifmri_prep01_greenlight.txt
+stamp=`date +%Y%m%d_%H%M%S`
+printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${stamp}" > .lnifmri_prep01_greenlight.txt
 sleep 2
 
 NextStep

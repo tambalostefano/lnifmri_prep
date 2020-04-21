@@ -32,8 +32,7 @@ Usage() {
 
 Start() {
     # clear
-    printf "**************************************************************\n"
-    printf "**************************************************************\n"
+    printf "\n**************************************************************\n"
     printf "LNiF MRI Lab Preprocessing Pipeline\n"
     printf "CIMeC - Center for Mind/Brain Science\n\n"
     printf "Consistency Check of Acq. Parameters\n\n"
@@ -58,25 +57,30 @@ pnglist=""
 Start
 
 # Define list of key parameters to be compared
-declare fields=( "RepetitionTime" \
-                    "EchoTime" \
-                    "PixelBandwidth" \
-                    "DerivedVendorReportedEchoSpacing" \
-                    "ReceiveCoilActiveElements" \
-                    "MultibandAccelerationFactor");
+declare fields=("RepetitionTime" \
+                "EchoTime" \
+                "PixelBandwidth" \
+                "DerivedVendorReportedEchoSpacing" \
+                "ReceiveCoilActiveElements" \
+                "MultibandAccelerationFactor");
 declare pars
 declare numpars
 
-subcount=0
-
 printf "Parsing acquisition parameters\n"    
 
-for SUBDIR in sub-*[0-9] ; do
-
-    for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do
-        epiname=`$FSLDIR/bin/remove_ext ${epiimg}`
-        scanname=`basename ${epiimg}`
-
+subcount=0
+for epiimg in `cat lnifmri_prep_ep2dlist.txt`; do
+# for SUBDIR in sub-*[0-9] ; do
+    # for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do
+        epiname=$($FSLDIR/bin/remove_ext ${epiimg})
+        scanname=$(basename ${epiimg})
+        
+        readarray -d / -t fileparts <<< "${epiimg}"
+        nid=$((${#fileparts[@]}-1))
+        sid=$((${#fileparts[@]}-3))
+        nameID=$(echo ${fileparts[${nid}]})
+        subID=$(echo ${fileparts[${sid}]})
+        
         # printf "\tReformat JSON file\n"
         # cat ${epiname}.json | tr -d '\n' > ${epiname}_temp1.json
         # sed 's/,\t"/,\n"/g' ${epiname}_temp1.json > ${epiname}_temp2.json
@@ -89,7 +93,7 @@ for SUBDIR in sub-*[0-9] ; do
             pars[$f]=$(awk '$1 ~ /"'"${fields[$f]}"'"/ {print $2}' ${epiname}.json | tr -d ',')
             # compute hash code of read parameter
             # to compare both numbers and strings
-            numpars[$f]=`cksum <<< ${pars[$f]} | cut -f 1 -d ' '`
+            numpars[$f]=$(cksum <<< ${pars[$f]} | cut -f 1 -d ' ')
             printf "${pars[$f]}\t" >> ${QCDIR}/qc_screen_rawfunc.txt
             printf "${numpars[$f]}\t" >> ${QCDIR}/qc_screen_func.txt     
         done
@@ -99,32 +103,18 @@ for SUBDIR in sub-*[0-9] ; do
         printf "\n" >> ${QCDIR}/qc_screen_func.txt
         # GLM design
         printf "1\n" >> ${QCDIR}/qc_screen_design.txt
-    done #${epiname}
+    # done #${epiname}
 
     printf "[%02d]\t\n" "$(( ++subcount ))" >> ${QCDIR}/qc_screen_code.txt
-    printf "%s\t\n" "${SUBDIR}" >> ${QCDIR}/qc_screen_subs.txt
+    printf "%s\t\n" "${subID}" >> ${QCDIR}/qc_screen_subs.txt
+    unset fileparts
 done #for .sub
+
+cat ${QCDIR}/qc_screen_subs.txt | sort | uniq > ${QCDIR}/qc_screen_subs_uniq.txt
+
 paste -d " " ${QCDIR}/qc_screen_code.txt ${QCDIR}/qc_screen_subs.txt > ${QCDIR}/qc_screen_rows.txt
 
 printf "\n"
-
-# # ################ ONLY FOR TESTING PURPOSE #########################################
-# # ###################################################################################
-# dTR=1.1
-# dTE=0.032
-# dBW=2237
-# dES=0.00061
-# dMB=8
-# dTRc=`cksum <<< ${dTR} | cut -f 1 -d ' '`
-# dTEc=`cksum <<< ${dTE} | cut -f 1 -d ' '`
-# dBWc=`cksum <<< ${dBW} | cut -f 1 -d ' '`
-# dESc=`cksum <<< ${dES} | cut -f 1 -d ' '`
-# dMBc=`cksum <<< ${dMB} | cut -f 1 -d ' '`
-
-# printf "${dTRc}\t${dTEc}\t${dBWc}\t${dESc}\t${dMBc}\n" >> ${QCDIR}/qc_screen_func.txt
-# printf "1\n" >> ${QCDIR}/qc_screen_design.txt
-# # ####################################################################################
-# # ####################################################################################
 
 if [ "$subcount" -gt "1" ]; then
     $FSLDIR/bin/fsl_glm -i ${QCDIR}/qc_screen_func.txt \
@@ -143,17 +133,17 @@ if [ "$subcount" -gt "1" ]; then
         title=${fields[$p]}
         entry=$(echo "${title}" | tr -dc '[:upper:]')
         $FSLDIR/bin/fsl_tsplot  -i ${QCDIR}/qc_screen_resnorm.txt \
-                           	    -t ${title} -x "Subject" \
+                           	    -t ${title} -x " " \
                            	    -w 640 -h 144 \
                                 --start=${l} --finish=${l} \
                            	    --ymin=-3 --ymax=3 \
-                           	    -o ${QCDIR}/qc_screenpars_${fields[p]}.png;
+                           	    -o ${QCDIR}/qc_acqpars_${fields[p]}.png;
 
-        printf -v plot "${QCDIR}/qc_screenpars_${fields[p]}.png"
+        printf -v plot "${QCDIR}/qc_acqpars_${fields[p]}.png"
         
         [[ -z "$pnglist" ]] && pnglist="${pnglist} ${plot}" || pnglist="${pnglist} - ${plot}"
     done
-    $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_acqparam_QC.png
+    $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_qc_acqpars.png
 else
     printf "\nToo few subjects. Nothing to plot.\n"
 fi
@@ -174,15 +164,16 @@ printf "\n" >> ${QCDIR}/qc_screen_headers.txt
 paste -d " " ${QCDIR}/qc_screen_rows.txt ${QCDIR}/qc_screen_rawfunc.txt > ${QCDIR}/qc_screen_table.txt
 #Print table headers
 cat ${QCDIR}/qc_screen_headers.txt ${QCDIR}/qc_screen_table.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/qc_screen_formattedtable.txt
+paste -d " " ${QCDIR}/qc_screen_code.txt lnifmri_prep_ep2dlist.txt > ${QCDIR}/qc_screen_scans.txt
 
 while true; do
     # clear
-    Start
+    # Start
     
     #Print legend and formatted data table
     cat ${QCDIR}/qc_screen_keyheaders.txt | sed 's/\t/,|,/g' | column -s ',' -t
     printf "\n"
-    cat ${QCDIR}/qc_screen_formattedtable.txt | awk 'NR<2 {print $0;next} {print $0 | "sort -k 5 | uniq -f 5 --group=prepend"}'
+    cat ${QCDIR}/qc_screen_formattedtable.txt | awk 'NR<2 {print $0;next} {print $0 | "sort"}'
     
     Prompt
     # Read input string
@@ -192,13 +183,13 @@ while true; do
     else
         # Print input list
         for L in ${list}; do
-            printf "sub-%s\t\n" "${L}" >> ${QCDIR}/qc_screen_purgelist.txt
+            printf "[${L}]\n" >> ${QCDIR}/qc_screen_purgelist.txt
         done
         # Validate input list - show only matching entries
-        check=$(awk 'NR == FNR{ a[$0] = 1;next } a[$0]' ${QCDIR}/qc_screen_purgelist.txt ${QCDIR}/qc_screen_subs.txt)
+        check=$(awk 'NR == FNR{ a[$1] = 1; next } a[$1]' ${QCDIR}/qc_screen_purgelist.txt ${QCDIR}/qc_screen_scans.txt)
         [[ -z "$check" ]] && check="NONE"
     fi
-    printf "The following subjects will be EXCLUDED from the analysis:\n\n%s\n\n" "$check"
+    printf "The following SCANS will be EXCLUDED from the analysis:\n\n%s\n\n" "$check"
     printf "Continue? (y/n): "
     # Read user input
     read answer
@@ -207,8 +198,8 @@ while true; do
             [yY]* )
                 # Prepare input list for other scripts
                 printf "\nPopulating input list..."
-                printf "%s" "${check}" > ${QCDIR}/qc_screen_purgedsubs.txt
-                awk 'NR == FNR{ a[$0] = 1;next } !a[$0]' ${QCDIR}/qc_screen_purgedsubs.txt ${QCDIR}/qc_screen_subs.txt > ${QCDIR}/lnifmri_prep_inputlist.txt
+                printf "%s" "${check}" > ${QCDIR}/qc_screen_purgedscans.txt
+                awk 'NR == FNR{ a[$1] = 1; next } !a[$1] {print $2}' ${QCDIR}/qc_screen_purgedscans.txt ${QCDIR}/qc_screen_scans.txt > lnifmri_prep_inputlist.txt
                 printf "done.\nStarting workflow...\n\n"
                 exit 1;;
 
