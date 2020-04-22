@@ -72,8 +72,8 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
     TR=$(awk '$1 ~ /"RepetitionTime"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
 
     #Next steps are self-explanatory
-    printf "\tDiscarding first 10 vols\n"
-    $FSLDIR/bin/fslroi $epiimg $epiimg 0 100
+    # printf "\tDiscarding first 10 vols\n"
+    # $FSLDIR/bin/fslroi $epiimg $epiimg 0 100
 
     printf "\tSetting data type\n"
     $FSLDIR/bin/fslmaths $epiimg $epiimg -odt float 
