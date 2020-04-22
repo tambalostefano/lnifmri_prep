@@ -121,7 +121,7 @@ Start
 
 #These are calls to individual tools - lines are self-explanatory
 printf "Creating directory structure\t"
-$LNIFMRIDIR/multiepi/lnifmri_prep00_organize -o ${DIRNAME} >> ${LOGDIR}/00_organize.txt
+$LNIFMRIDIR/lnifmri_prep00_organize -o ${DIRNAME} >> ${LOGDIR}/00_organize.txt
 duration=$SECONDS
 printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
 elapsed=$(echo $elapsed + $duration | bc)
@@ -130,7 +130,7 @@ Progress
 cd ./${DIRNAME}
 
 printf "\n"
-$LNIFMRIDIR/multiepi/lnifmri_prep00_screening
+$LNIFMRIDIR/lnifmri_prep00_screening
 duration=$SECONDS
 printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
 elapsed=$(echo $elapsed + $duration | bc)
@@ -141,7 +141,7 @@ Start
 
 SECONDS=0
 printf "Processing structural data\t"
-$LNIFMRIDIR/multiepi/lnifmri_prep01_anat >> ${LOGDIR}/01_structural.txt &
+$LNIFMRIDIR/lnifmri_prep01_anat >> ${LOGDIR}/01_structural.txt &
 duration=$SECONDS
 printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
 elapsed=$(echo $elapsed + $duration | bc)
@@ -151,7 +151,7 @@ if [[ -s ./lnifmri_prep_inputlist.txt  ]]; then
 
     SECONDS=0
     printf "Processing functional data\n\tMotion correction\t"
-    $LNIFMRIDIR/multiepi/lnifmri_prep02_preproc >> ${LOGDIR}/02_motioncorr.txt &
+    $LNIFMRIDIR/lnifmri_prep02_preproc >> ${LOGDIR}/02_motioncorr.txt &
     duration=$SECONDS
     printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
     elapsed=$(echo $elapsed + $duration | bc)
@@ -159,7 +159,7 @@ if [[ -s ./lnifmri_prep_inputlist.txt  ]]; then
 
     SECONDS=0
     printf "\tSuscept. dist. correction"
-    $LNIFMRIDIR/multiepi/lnifmri_prep03_sdc >> ${LOGDIR}/03_suscdistcorr.txt
+    $LNIFMRIDIR/lnifmri_prep03_sdc >> ${LOGDIR}/03_suscdistcorr.txt
     duration=$SECONDS
     printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
     elapsed=$(echo $elapsed + $duration | bc)
@@ -167,7 +167,7 @@ if [[ -s ./lnifmri_prep_inputlist.txt  ]]; then
 
     SECONDS=0
     printf "\tNuis. regr. and BP filter"
-    $LNIFMRIDIR/multiepi/lnifmri_prep04_filter ${opts} >> ${LOGDIR}/04_nuisancefilter.txt
+    $LNIFMRIDIR/lnifmri_prep04_filter ${opts} >> ${LOGDIR}/04_nuisancefilter.txt
     duration=$SECONDS
     printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
     elapsed=$(echo $elapsed + $duration | bc)
@@ -175,7 +175,7 @@ if [[ -s ./lnifmri_prep_inputlist.txt  ]]; then
 
     SECONDS=0
     printf "Creating QC report\t\t"
-    $LNIFMRIDIR/multiepi/lnifmri_prep05_qc >> ${LOGDIR}/05_qcreport.txt
+    $LNIFMRIDIR/lnifmri_prep05_qc >> ${LOGDIR}/05_qcreport.txt
     duration=$SECONDS
     printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
     elapsed=$(echo $elapsed + $duration | bc)
