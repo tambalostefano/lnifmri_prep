@@ -115,8 +115,8 @@ cat ${QCDIR}/qc_screen_subs.txt | sort | uniq > ${QCDIR}/qc_screen_subs_uniq.txt
 paste -d " " ${QCDIR}/qc_screen_code.txt ${QCDIR}/qc_screen_subs.txt > ${QCDIR}/qc_screen_rows.txt
 
 printf "\n"
-
-if [ "$subcount" -gt "1" ]; then
+#Do not run GLM if subject < 3
+if [ "$subcount" -gt "2" ]; then
     $FSLDIR/bin/fsl_glm -i ${QCDIR}/qc_screen_func.txt \
                         -d ${QCDIR}/qc_screen_design.txt \
                         -o ${QCDIR}/qc_screen_out.txt \
@@ -128,7 +128,7 @@ if [ "$subcount" -gt "1" ]; then
     sed -i 's/-nan/1/g' ${QCDIR}/qc_screen_resnorm.txt 
 
     for p in "${!fields[@]}"; do
-    #Plot motion traces
+    #Plot parameters traces
         l=$((${p}+1))
         title=${fields[$p]}
         entry=$(echo "${title}" | tr -dc '[:upper:]')
@@ -147,9 +147,6 @@ if [ "$subcount" -gt "1" ]; then
 else
     printf "\nToo few subjects. Nothing to plot.\n"
 fi
-
-duration=$SECONDS
-printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."
 
 #Format table headers
 printf "Code\tSub-ID\t" >> ${QCDIR}/qc_screen_headers.txt
@@ -215,5 +212,4 @@ while true; do
                 ;;
         esac
     done
-
 done

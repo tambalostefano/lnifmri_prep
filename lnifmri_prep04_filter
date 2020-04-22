@@ -110,6 +110,7 @@ for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
 	gmstruc=${subID}/$STR.anat/T1_gmedge.nii.gz
 	csfstruc=${subID}/$STR.anat/T1_csfedge.nii.gz
 	brainmask=${subID}/$STR.anat/T1_biascorr_brain_mask.nii.gz
+	mniwarp=${subID}/${STR}.anat/T1_to_MNI_nonlin_field.nii.gz
 	std=$FSLDIR/data/standard/MNI152_T1_2mm.nii.gz
 	
 	# Check to restart the ses-XX counter
@@ -122,8 +123,6 @@ for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
 	printf "\n%s_ses-%02d:\n" "${subID}" "$(( ++subcount ))"
 
 	TR=$(awk '$1 ~ /"RepetitionTime"/ {print $2}' ${subID}/func/${jsonID}_parameters.json | tr -d ',')
-
-	#printf "\tScan Name: $nameID\n\tEpi Name: $epiname\n\tEpi IMG: $epiimg\n\tJSON name: $jsonID\n\tTR: $TR\n"
 
 	printf "\tExtracting WM regressor\n"
 	$FSLDIR/bin/fslmeants -i ${epiimg} -o ${epiname}_regressor_wm.txt -m ${wmstruc}
@@ -200,17 +199,17 @@ for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
 		$FSLDIR/bin/fslmeants -i ${outname}-spectrum -o ${outname}-spectrum.txt  -m ${gmstruc} -w
 		dim=$(cat ${outname}-spectrum.txt | wc -l )
 		nyq=$(echo "0.5/${TR}/${dim}" | bc -l )
-		printf "${nyq} ${subID} ${sesID} ${TR}" > ${outname}-spectraspecs.txt
+		printf "${nyq}\n${subID}\n${sesID}\n${TR}" > ${outname}-spectraspecs.txt
 		paste -d " " ${epiname}-spectrum_pre.txt ${outname}-spectrum.txt > ${outname}-spectra.txt
 		# Plot spectra
-		$FSLDIR/bin/fsl_tsplot	-i ${outname}-spectra.txt \
-								-u $nyq \
-								-y "Power" -x "Frequency (Hz)" \
-								-t "${subID}_${sesID} - GMw Power Spectrum - TR(s): ${TR}" \
-								-a raw,bpf -w 660 -h 220 \
-								--ymin=0 --ymax=1.5e+6 \
-								--start=1 --finish=2 \
-								-o ${outname}-spectra.png;
+		# $FSLDIR/bin/fsl_tsplot	-i ${outname}-spectra.txt \
+		# 						-u $nyq \
+		# 						-y "Power" -x "Frequency (Hz)" \
+		# 						-t "${subID}_${sesID} - GMw Power Spectrum - TR(s): ${TR}" \
+		# 						-a raw,bpf -w 660 -h 220 \
+		# 						--ymin=0 --ymax=1.5e+6 \
+		# 						--start=1 --finish=2 \
+		# 						-o ${outname}-spectra.png;
 	#otherwise skip this step
 	else
 		printf -v outname -- "${outpath}/${subID}_ses-%02d_bold_task" "${subcount}"
@@ -222,7 +221,7 @@ for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
 	printf "\tFinal warping of EPI to MNI\n"
 	$FSLDIR/bin/applywarp	-i ${outname} \
 							-r ${std} \
-							-w ${epiname}_warp2MNI.nii.gz \
+							-w ${mniwarp} \
 							--interp=spline \
 							-o ${outname}-MNI.nii.gz;
 
@@ -242,7 +241,8 @@ for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
 								--nobet --tr=$TR --mmthresh=0.66 \
 								-d ${comp} \
 								-m ${brainmask} \
-								--report -v &
+								--report -v > ${outname}-smooth-melodiclog.txt 2>&1 &
+		    #some_cmd > some_file 2>&1 &
 			;;
 		n)
 			printf "\tSkipping SS-ICA\n"

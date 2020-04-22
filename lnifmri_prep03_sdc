@@ -77,7 +77,6 @@ arg="# ##############################################################\n\
 exectime=0
 SECONDS=0
 QCDIR=`pwd`/qc
-#printf $QCDIR
 
 Start
 
@@ -94,7 +93,6 @@ while true; do
   	fi
 done
 
-# for SUBDIR in sub-*[0-9] ; do
 for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
     epiname=$($FSLDIR/bin/remove_ext ${epiimg})
     

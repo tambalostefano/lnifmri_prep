@@ -42,10 +42,7 @@ exectime=0
 SECONDS=0
 pnglist=""
 QCDIR=`pwd`/qc
-# stamp=`date +'%T'`
 stamp=`date +%Y%m%d_%H%M%S`
-
-#legend="fmp,tup,unc"
 
 Start
 
@@ -71,73 +68,37 @@ done
 #Create final plot (motion)                       
 $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_qc_motion.png
 
-# ###############################################################################################	
-# # Compose summary motion report
-# for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
-
-#     epiname=$($FSLDIR/bin/remove_ext ${epiimg})
-    
-#     readarray -d / -t fileparts <<< "${epiimg}"
-#     sid=$((${#fileparts[@]}-3))
-#     subID=$(echo ${fileparts[${sid}]})
-
-# 	# printf "${subID}\n" >> ${QCDIR}/qc_screen_subs.txt
-
-# 	rot=${epiname}_rot.png
-# 	tra=${epiname}_tra.png
-
-# 	#Compose a single-subject motion report
-# 	if [ -f ${epiname}_motout.txt ]; then
-# 		mot=${epiname}_motout.png
-# 		# Link 3 motion charts in a single row
-# 		printf -v str  "%s + %s + %s" "$mot" "$tra" "$rot" 
-# 		[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
-# 	else
-# 		#Create an empty placeholder to keep consistent layout of report
-# 		printf "${subID}: Motion outliers not found! Preparing a placeholder\n"
-# 		k=$($FSLDIR/bin/fslval ${epiimg} dim4)
-# 		awk -v i=$k 'BEGIN { OFS="0\n"; $i="0"; print }' > ${subID}/func/placeholder_motout.txt
-# 		$FSLDIR/bin/fsl_tsplot	-i ${subID}/func/placeholder_motout.txt \
-# 								-t 'Motion Outliers not detected' \
-# 								-a out,dvars -w 660 -h 220 \
-# 								--ymin=0 --ymax=100 \
-# 								-o ${subID}/func/placeholder_motout.png;
-# 		mot=${subID}/func/placeholder_motout.png
-# 		printf -v str  "%s + %s + %s" "$mot" "$tra" "$rot" 
-# 		[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
-# 	fi
-# done
-
-# # paste -d " " `ls -d1 $(pwd)/sub*/func/*_motout.txt` > ${QCDIR}/qc_motion_motout.txt	
-# # # Merge motion outliers temporal masks and plot a group report
-# # awk '{for(i=1;i<=NF;i++)x+=$i;print x;x=0}' $QCDIR/qc_motion_motout.txt > $QCDIR/qc_motion_motout_sum.txt
-# # $FSLDIR/bin/fsl_tsplot	-i $QCDIR/qc_motion_motout_sum.txt\
-# # 							-t 'Summary of Motion Outliers'\
-# # 							-a sum -w 640 -h 144 \
-# # 							-o $QCDIR/qc_summary_motout.png;
-# # pnglist="$pnglist ${QCDIR}/qc_summary_motout.png"
-
-# #Create final plot (motion)                       
-# $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_qc_motion.png
-
 ###############################################################################################
 # Compose summary power spectra report
 
 for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
-	speclist=$(ls -d1 ${subID}/func/sdc_unc/*-spectra.png)
+	plots=$(ls -d1 ${subID}/func/sdc_unc/*-spectra.txt)
 	pslist=""
 	# In case there is only TASK data	
-	if [ -z "$speclist" ]; then
+	if [ -z "$plots" ]; then
 		printf "${subID}: Power spectra not found!\n"		
 	else
-		for ps in $speclist ; do
-			printf "${subID}: ${ps}\n"		
-
+		# Load subj specific plot data
+		for p in ${plots}; do
+			path=$(dirname ${p})
+			id=${p%.txt}
+			printf -v plotDATAID "${id}%s" "specs.txt"
+			readarray -t plotDATA < "${plotDATAID}"
+			# echo ${plotDATA[@]}
+			ps="${path}/${plotDATA[1]}_${plotDATA[2]}-spectra.png"
+			$FSLDIR/bin/fsl_tsplot	-i ${p} \
+									-u ${plotDATA[0]} \
+									-y "Power" -x "Frequency (Hz)" \
+									-t "${plotDATA[1]}_${plotDATA[2]} - GMw Power Spectrum - TR(s): ${plotDATA[3]}" \
+									-a raw,bpf -w 660 -h 220 \
+									--ymin=0 --ymax=1.5e+6 \
+									--start=1 --finish=2 \
+									-o ${ps};
+			# printf "${subID}: ${ps}\n"		
 	   		[[ -z "$pslist" ]] && pslist="${pslist} ${ps}" || pslist="${pslist} + ${ps}"
-	 	done
-	 	
-	 	$FSLDIR/bin/pngappend ${pslist} ${QCDIR}/qc_pspec_${subID}.png
+   		done
 	fi
+ 	$FSLDIR/bin/pngappend ${pslist} ${QCDIR}/qc_pspec_${subID}.png
 done
 
 #Create final plot (power spectrum)
@@ -145,7 +106,31 @@ printf -v pspeclist "$( ls -d1 ${QCDIR}/qc_pspec_sub*.png | sed ':a;N;$!ba;s/\n/
 $FSLDIR/bin/pngappend ${pspeclist} $QCDIR/lnifmri_prep_qc_pspec.png
 
 # ###############################################################################################
-# # Compose summary power spectra report
+# # Compose summary power spectra report - V2
+
+# for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
+# 	speclist=$(ls -d1 ${subID}/func/sdc_unc/*-spectra.png)
+# 	pslist=""
+# 	# In case there is only TASK data	
+# 	if [ -z "$speclist" ]; then
+# 		printf "${subID}: Power spectra not found!\n"		
+# 	else
+# 		for ps in $speclist ; do
+# 			printf "${subID}: ${ps}\n"		
+
+# 	   		[[ -z "$pslist" ]] && pslist="${pslist} ${ps}" || pslist="${pslist} + ${ps}"
+# 	 	done
+	 	
+# 	 	$FSLDIR/bin/pngappend ${pslist} ${QCDIR}/qc_pspec_${subID}.png
+# 	fi
+# done
+
+# #Create final plot (power spectrum)
+# printf -v pspeclist "$( ls -d1 ${QCDIR}/qc_pspec_sub*.png | sed ':a;N;$!ba;s/\n/ - /g' )"
+# $FSLDIR/bin/pngappend ${pspeclist} $QCDIR/lnifmri_prep_qc_pspec.png
+
+# ###############################################################################################
+# # Compose summary power spectra report - V1 - DEPRECATED
 
 # for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
 # 	speclist=$(ls -d1 ${subID}/func/sdc_unc/*-spectrum.txt)
@@ -220,7 +205,7 @@ cp ${QCDIR}/qc_screen_formattedtable.txt 	${QCDIR}/lnifmri_prep_qc_report_format
 cp ${QCDIR}/qc_screen_purgedscans.txt 		${QCDIR}/lnifmri_prep_qc_report_purgedscans.txt
 
 # Input list with SDC info
-paste -d " " ${QCDIR}/qc_screen_subs_uniq.txt ${QCDIR}/qc_screen_sdc.txt > ${QCDIR}/lnifmri_prep_qc_report_subssdc.txt
+paste -d " " ${QCDIR}/qc_screen_subs_uniq.txt ${QCDIR}/qc_report_sdc.txt > ${QCDIR}/lnifmri_prep_qc_report_subssdc.txt
 
 # Conversion list raw subj-name -> sub-XX
 printf "%s ->\n" `ls -d1 ../*.sub` > ${QCDIR}/qc_screen_rawsubs.txt
@@ -484,7 +469,7 @@ hr.solid {
   <h3 style="text-align: center";>Power Spectrum of Timeseries</h3>
   <p style="text-align: center";>Overlay of raw and BPF, SD-uncorrected timeseries</p>
 <br><br><br>
-  <img src="lnifmri_prep_qc_pspec.png" alt="PSPECdata">
+  <img src="lnifmri_prep_qc_pspec.png" alt="PSPECdata" class="responsive">
 <br><br><br><br>
 </div>
 

@@ -50,6 +50,7 @@ NextStep() {
 
 [ "$1" = "" ] && Usage
 
+# Set default directories
 SUBDIR=""
 SUBPATH=""
 DIRNAME=""
@@ -99,8 +100,7 @@ for DCMDIR in `cat dcmlist.txt` ; do
         mv ${DCMDIR} ${DCMDIR}.sub
     fi
 done
-
-printf "\n\nConversion completed. Setting up the environment \n\n\n"
+printf "\n\nConversion complete. Setting up the environment \n\n\n"
 
 #Prepare the output directory tree
 for SUBRAW in *.sub ; do
