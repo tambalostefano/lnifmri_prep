@@ -30,7 +30,9 @@ Start() {
 }
 
 NextStep() {
-    printf "Complete. Exec. Time: ${exectime}"
+    printf "Complete. Exec. Time: ${exectime}\n\n"
+	printf "To browse a QC summary of your data, open:\n"    
+	printf "file:/%s\n" "`pwd`/lnifmri_prep_report.html"    	
     printf "\n\n***************************************************\n\n"
     exit 1
 }
@@ -40,166 +42,217 @@ exectime=0
 SECONDS=0
 pnglist=""
 QCDIR=`pwd`/qc
-stamp=`date +'%T'`
-
-#legend="fmp,tup,unc"
+stamp=`date +%Y%m%d_%H%M%S`
 
 Start
 
-# for SUBDIR in sub-*[0-9] ; do
-for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
+###############################################################################################	
+# Compose summary motion report
+for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 
-	#printf "$SUBDIR\n"
+    epiname=$($FSLDIR/bin/remove_ext ${epiimg})
+    
+    readarray -d / -t fileparts <<< "${epiimg}"
+    sid=$((${#fileparts[@]}-3))
+    subID=$(echo ${fileparts[${sid}]})
+
+	# Compose a single-subject motion report
+	rot=${epiname}_rot.png
+	tra=${epiname}_tra.png
+	mot=${epiname}_motout.png
+	# Link 3 motion charts in a single row
+	printf -v str  "%s + %s + %s" "$mot" "$tra" "$rot" 
+	[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
+done
+
+#Create final plot (motion)                       
+$FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_qc_motion.png
+
+###############################################################################################
+# Compose summary power spectra report
+
+for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
+	plots=$(ls -d1 ${subID}/func/sdc_unc/*-spectra.txt)
+	pslist=""
+	# In case there is only TASK data	
+	if [ -z "$plots" ]; then
+		printf "${subID}: Power spectra not found!\n"		
+	else
+		# Load subj specific plot data
+		for p in ${plots}; do
+			path=$(dirname ${p})
+			id=${p%.txt}
+			printf -v plotDATAID "${id}%s" "specs.txt"
+			readarray -t plotDATA < "${plotDATAID}"
+			# echo ${plotDATA[@]}
+			ps="${path}/${plotDATA[1]}_${plotDATA[2]}-spectra.png"
+			$FSLDIR/bin/fsl_tsplot	-i ${p} \
+									-u ${plotDATA[0]} \
+									-y "Power" -x "Frequency (Hz)" \
+									-t "${plotDATA[1]}_${plotDATA[2]} - GMw Power Spectrum - TR(s): ${plotDATA[3]}" \
+									-a raw,bpf -w 660 -h 220 \
+									--ymin=0 --ymax=1.5e+6 \
+									--start=1 --finish=2 \
+									-o ${ps};
+			# printf "${subID}: ${ps}\n"		
+	   		[[ -z "$pslist" ]] && pslist="${pslist} ${ps}" || pslist="${pslist} + ${ps}"
+   		done
+	fi
+ 	$FSLDIR/bin/pngappend ${pslist} ${QCDIR}/qc_pspec_${subID}.png
+done
+
+#Create final plot (power spectrum)
+printf -v pspeclist "$( ls -d1 ${QCDIR}/qc_pspec_sub*.png | sed ':a;N;$!ba;s/\n/ - /g' )"
+$FSLDIR/bin/pngappend ${pspeclist} $QCDIR/lnifmri_prep_qc_pspec.png
+
+# ###############################################################################################
+# # Compose summary power spectra report - V2
+
+# for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
+# 	speclist=$(ls -d1 ${subID}/func/sdc_unc/*-spectra.png)
+# 	pslist=""
+# 	# In case there is only TASK data	
+# 	if [ -z "$speclist" ]; then
+# 		printf "${subID}: Power spectra not found!\n"		
+# 	else
+# 		for ps in $speclist ; do
+# 			printf "${subID}: ${ps}\n"		
+
+# 	   		[[ -z "$pslist" ]] && pslist="${pslist} ${ps}" || pslist="${pslist} + ${ps}"
+# 	 	done
+	 	
+# 	 	$FSLDIR/bin/pngappend ${pslist} ${QCDIR}/qc_pspec_${subID}.png
+# 	fi
+# done
+
+# #Create final plot (power spectrum)
+# printf -v pspeclist "$( ls -d1 ${QCDIR}/qc_pspec_sub*.png | sed ':a;N;$!ba;s/\n/ - /g' )"
+# $FSLDIR/bin/pngappend ${pspeclist} $QCDIR/lnifmri_prep_qc_pspec.png
+
+# ###############################################################################################
+# # Compose summary power spectra report - V1 - DEPRECATED
+
+# for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
+# 	speclist=$(ls -d1 ${subID}/func/sdc_unc/*-spectrum.txt)
+	
+# 	# In case there is only TASK data	
+# 	if [ -z "$speclist" ]; then
+
+# 		printf "${subID}: Power spectrum not found!\n"		
+
+# 	else
+# 		# Merge spectra files and plot a subject-wise overlay
+# 	    paste -d " " ${speclist} > ${QCDIR}/qc_${subID}_pspectra.txt
+# 		# Number of spectra available
+# 		last=$(awk '{print NF; exit}' $QCDIR/qc_${subID}_pspectra.txt)
+# 		# Plot a chart for each spectrum
+# 		for i in $(seq 1 ${last}) ; do
+# 			printf -v sesID "ses-%02d" "${i}"	
+# 			TR=$($FSLDIR/bin/fslval ${subID}/func/sdc_unc/${subID}_${sesID}_bold_rest.nii.gz pixdim4)	
+# 			dim=$(cat $QCDIR/qc_${subID}_pspectra.txt | wc -l )
+# 			nyq=$(echo "0.5/${TR}/${dim}" | bc -l )
+# 			printf -v psout "${QCDIR}/qc_${subID}_${sesID}_pspec.png"
+
+# 			$FSLDIR/bin/fsl_tsplot  -i $QCDIR/qc_${subID}_pspectra.txt \
+# 									-u ${nyq} \
+# 		 							-y "Power" -x "Frequency (Hz)" \
+# 			                  	    -t "${subID} GMw Power Spectra (SD-uncorrected data)" \
+# 		 	   	                    -a ${sesID} -w 660 -h 220 \
+# 		 	   	                    --ymin=0 --ymax=1e+6 \
+# 		 	   	                    --start=${i} --finish=${i} \
+# 		 	       		            -o ${psout};
+
+# 	   		[[ -z "$pslist" ]] && pslist="${pslist} ${psout}" || pslist="${pslist} - ${psout}"
+# 	 	done
+
+# 	 	$FSLDIR/bin/pngappend ${pslist} ${QCDIR}/qc_pspec_${subID}.png
+# 	fi
+# done
+
+# #Create final plot (power spectrum)
+# printf -v pspeclist "$( ls -d1 ${QCDIR}/qc_pspec_sub*.png | sed ':a;N;$!ba;s/\n/ + /g' )"
+# $FSLDIR/bin/pngappend ${pspeclist} $QCDIR/lnifmri_prep_qc_pspec.png
+
+
+###############################################################################################
+# Compose summary SDC methods available for subID
+# Update labels in case some options are missing (FMP, TUP or both)
+for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
 	fs="fmp,"
 	ts="tup,"
 	us="unc"
 
-	#Load EPI scan
-	for epiimg in `ls -d1 ${SUBDIR}/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz`; do
-	    
-		scanname=`basename ${epiimg}`
-		epiname=`$FSLDIR/bin/remove_ext ${epiimg}`
-		rot=${epiname}_rot.png
-		tra=${epiname}_tra.png
-
-		#Compose a single-subject motion report
-		if [ -f ${epiname}_motout.txt ]; then
-			mot=${epiname}_motout.png
-			printf -v str  "%s + %s + %s" "$mot" "$tra" "$rot" 
-        	[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
-		else
-			#Create an empty placeholder to keep consistent layout of report
-			printf "${SUBDIR}: Motion outliers not found! Preparing a placeholder\n"
-			k=`$FSLDIR/bin/fslval ${epiimg} dim4`
-			#printf '0\n%.0s' {1..$k} > $SUBDIR/func/placeholder_motout.txt
-			awk -v i=$k 'BEGIN { OFS="0\n"; $i="0"; print }' > $SUBDIR/func/placeholder_motout.txt
-		    $FSLDIR/bin/fsl_tsplot  -i $SUBDIR/func/placeholder_motout.txt \
-		                    	    -t 'Motion Outliers not detected' \
-        		                    -a out -w 640 -h 144 \
-                		            --ymin=0 --ymax=100 \
-                        	    	-o $SUBDIR/func/placeholder_motout.png;
-       		mot=$SUBDIR/func/placeholder_motout.png
-			printf -v str  "%s + %s + %s" "$mot" "$tra" "$rot" 
-	        [[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
-		fi
-	done #for epiimg
-	#Prepare placeholder for powerspectrum in case some options are missing (FMP, TUP or both)
-	if [ ! -d $SUBDIR/func/sdc_fmp ]; then
-		fs="xxx,"
-		printf "${SUBDIR}: FMP power spectrum not found! Preparing a placeholder\n"
-		mkdir $SUBDIR/func/sdc_fmp_placeholder 
-		awk -v i=$d 'BEGIN { OFS="0\n"; $i="0"; print }' > $SUBDIR/func/sdc_fmp_placeholder/placeholder_spectrum.txt
+	if [ ! -d ${subID}/func/sdc_fmp ]; then
+		fs="---,"
 	fi
-	if [ ! -d $SUBDIR/func/sdc_tup ]; then
-		ts="xxx,"
-		printf "${SUBDIR}: TUP power spectrum not found! Preparing a placeholder\n"		
-		mkdir $SUBDIR/func/sdc_tup_placeholder 
-		awk -v i=$d 'BEGIN { OFS="0\n"; $i="0"; print }' > $SUBDIR/func/sdc_tup_placeholder/placeholder_spectrum.txt
+	if [ ! -d ${subID}/func/sdc_tup ]; then
+		ts="---,"
 	fi
-	
-	#Compose label for charts
-	printf -v lbl "${fs}${ts}${us}"
-	
-	#Merge spectra files and plot a subject-wise overlay
-    paste -d " " `ls -d1 ${SUBDIR}/func/sdc_*/*_spectrum.txt` > $QCDIR/qc_${SUBDIR}_pspectra.txt
-	d=$(cat $QCDIR/qc_${SUBDIR}_pspectra.txt | wc -l )
-	nyq=$(echo "0.5/2/${d}" | bc -l)
-    
-	$FSLDIR/bin/fsl_tsplot  -i $QCDIR/qc_${SUBDIR}_pspectra.txt \
-							-u ${nyq} \
- 							-y "Power" -x "Frequency (Hz)" \
-	                  	    -t "${SUBDIR} Power Spectra" \
- 	   	                    -a ${lbl} -w 640 -h 144 \
- 	   	                    --ymin=0 --ymax=500000 \
- 	   	                    --start=1 --finish=3 \
- 	       		            -o $QCDIR/qc_${SUBDIR}_pspectra.png;
-	
-	paste -d " " `ls -d1 ${SUBDIR}/func/*_motout.txt` > $QCDIR/qc_global_motout.txt
-done #for SUBDIR
+	printf "(Avail. SDC: %s)\n" "${fs}${ts}${us}" >> ${QCDIR}/qc_report_sdc.txt
+done #for subID
 
-#Merge motion outliers temporal masks and plot a group report
-# awk '{for(i=1;i<=NF;i++)x+=$i;print x;x=0}' $QCDIR/qc_global_motout.txt > $QCDIR/qc_sum_motout.txt
-# $FSLDIR/bin/fsl_tsplot	-i $QCDIR/qc_sum_motout.txt\
-# 						-t 'Summary of Motion Outliers'\
-# 						-a sum -w 640 -h 144 \
-#                         -o $QCDIR/qc_summary_motout.png;
-# pnglist="$pnglist ${QCDIR}/qc_summary_motout.png"
-
-#Create final plot (motion)                       
-$FSLDIR/bin/pngappend ${pnglist} $QCDIR/lnifmri_prep_motion_QC.png
-#Create final plot (power spectrum)
-printf -v pspeclist "$( ls -d1 ${QCDIR}/*pspectra.png | sed ':a;N;$!ba;s/\n/ - /g' )"
-$FSLDIR/bin/pngappend ${pspeclist} $QCDIR/lnifmri_prep_pspec_QC.png
-
-#Create filelist for group-ICA in MNI space
+###############################################################################################
+# Create filelist for group-ICA in MNI space
 ls -d1 `pwd`/sub*/func/sdc_fmp/*MNI-smooth.nii.gz > $QCDIR/filelist-groupICA-fmp.txt
 ls -d1 `pwd`/sub*/func/sdc_tup/*MNI-smooth.nii.gz > $QCDIR/filelist-groupICA-tup.txt
 ls -d1 `pwd`/sub*/func/sdc_unc/*MNI-smooth.nii.gz > $QCDIR/filelist-groupICA-unc.txt
 
-#Create filelist for VBM
-ls -d1 `pwd`/sub*/anat/*t1_*rage*[0-9]_+([0-9]).nii.gz > $QCDIR/filelist-VBM-template.txt
+###############################################################################################
+# Create some utility files for the HTML report
 
-#Clean up subject folder
-for SUBDIR in sub-* ; do
-	mkdir -p ${SUBDIR}/func/lnifmri_prep_files
-	ls -d1 ${SUBDIR}/func/*.* > ${SUBDIR}/func/${SUBDIR}_filelist.txt
-	xargs mv -t ${SUBDIR}/func/lnifmri_prep_files/ < ${SUBDIR}/func/${SUBDIR}_filelist.txt
-done
+cp ${QCDIR}/qc_screen_keyheaders.txt 		${QCDIR}/lnifmri_prep_qc_report_keyheaders.txt
+cp ${QCDIR}/qc_screen_formattedtable.txt 	${QCDIR}/lnifmri_prep_qc_report_formattedtable.txt
+cp ${QCDIR}/qc_screen_purgedscans.txt 		${QCDIR}/lnifmri_prep_qc_report_purgedscans.txt
 
-#Clean up QC folder 
-mkdir -p $QCDIR/lnifmri_prep_qcfiles
-mv $QCDIR/qc_*.txt $QCDIR/lnifmri_prep_qcfiles/
-mv $QCDIR/qc_*.png $QCDIR/lnifmri_prep_qcfiles/
-
-#Create some utility files for the HTML report
+# Input list with SDC info
+paste -d " " ${QCDIR}/qc_screen_subs_uniq.txt ${QCDIR}/qc_report_sdc.txt > ${QCDIR}/lnifmri_prep_qc_report_subssdc.txt
 
 # Conversion list raw subj-name -> sub-XX
-printf "%s ->\n" `ls -d1 ../*.sub` > ${QCDIR}/lnifmri_prep_qcfiles/qc_screen_rawsubs.txt
-paste ${QCDIR}/lnifmri_prep_qcfiles/qc_screen_rawsubs.txt ${QCDIR}/lnifmri_prep_qcfiles/qc_screen_subs.txt > ${QCDIR}/lnifmri_prep_qcfiles/qc_screen_rawtosubs.txt
+printf "%s ->\n" `ls -d1 ../*.sub` > ${QCDIR}/qc_screen_rawsubs.txt
+paste ${QCDIR}/qc_screen_rawsubs.txt ${QCDIR}/qc_screen_subs_uniq.txt > ${QCDIR}/lnifmri_prep_qc_report_rawtosubs.txt
 
 # List to populate registration gallery to std
-ls -d1 ${QCDIR}/lnifmri_prep_func2std_QC/*sub-*.png > ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostd_images.txt
-for s in `cat ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostd_images.txt`; do
+ls -d1 ${QCDIR}/lnifmri_prep_func2std_QC/*sub-*.png > ${QCDIR}/qc_gallery_regtostd_images.txt
+for s in `cat ${QCDIR}/qc_gallery_regtostd_images.txt`; do
 	case "${s}" in
 		*fmap*)
-			printf "%s(fmp)\n" `grep -oP "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostd_captions.txt
+			printf "%s(fmp)\n" `grep -oP "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_gallery_regtostd_captions.txt
 		;;
 		*tup*)
-			printf "%s(tup)\n" `grep -oP "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostd_captions.txt
+			printf "%s(tup)\n" `grep -oP "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_gallery_regtostd_captions.txt
 		;;
 		*unc*)
-			printf "%s(unc)\n" `grep -oP "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostd_captions.txt
+			printf "%s(unc)\n" `grep -oP "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_gallery_regtostd_captions.txt
 		;;
 	esac
 done
-paste -d "|" ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostd_images.txt ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostd_captions.txt > ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostd_media.txt
+paste -d "|" ${QCDIR}/qc_gallery_regtostd_images.txt ${QCDIR}/qc_gallery_regtostd_captions.txt > ${QCDIR}/qc_gallery_regtostd_media.txt
 awk	-F \| '
 	{printf "<div class=\"container\">\n\t<img src=\"%s\" alt=\"Reg2Std\" class=\"responsive\">\n\t<div class=\"top-left\">%s</div>\n</div>\n", $1, $2}' \
-	${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostd_media.txt > ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostd.txt
+	${QCDIR}/qc_gallery_regtostd_media.txt > ${QCDIR}/lnifmri_prep_qc_report_regtostd.txt
 
 # List to populate registration gallery to struc 
-ls -d1 ${QCDIR}/lnifmri_prep_func2struc_QC/*sub-*.png > ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc_images.txt
-for s in `cat ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc_images.txt`; do
+ls -d1 ${QCDIR}/lnifmri_prep_func2struc_QC/*sub-*.png > ${QCDIR}/qc_gallery_regtostruc_images.txt
+for s in `cat ${QCDIR}/qc_gallery_regtostruc_images.txt`; do
 	case "${s}" in
 		*fmap*)
-			printf "%s(fmp)\n" `grep -oP -m 1 "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc_captions_temp.txt
+			printf "%s(fmp)\n" `grep -oP -m 1 "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_gallery_regtostruc_captions_temp.txt
 		;;
 		*tup*)
-			printf "%s(tup)\n" `grep -oP -m 1 "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc_captions_temp.txt
+			printf "%s(tup)\n" `grep -oP -m 1 "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_gallery_regtostruc_captions_temp.txt
 		;;
 		*unc*)
-			printf "%s(unc)\n" `grep -oP -m 1 "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc_captions_temp.txt
+			printf "%s(unc)\n" `grep -oP -m 1 "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_gallery_regtostruc_captions_temp.txt
 		;;
 	esac
 done
-uniq ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc_captions_temp.txt > ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc_captions.txt
-paste -d "|" ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc_images.txt ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc_captions.txt > ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc_media.txt
+uniq ${QCDIR}/qc_gallery_regtostruc_captions_temp.txt > ${QCDIR}/qc_gallery_regtostruc_captions.txt
+paste -d "|" ${QCDIR}/qc_gallery_regtostruc_images.txt ${QCDIR}/qc_gallery_regtostruc_captions.txt > ${QCDIR}/qc_gallery_regtostruc_media.txt
 awk	-F \| '
 	{printf "<div class=\"container\">\n\t<img src=\"%s\" alt=\"Reg2Std\" class=\"responsive\">\n\t<div class=\"top-left\">%s</div>\n</div>\n", $1, $2}' \
-	${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc_media.txt > ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc.txt
+	${QCDIR}/qc_gallery_regtostruc_media.txt > ${QCDIR}/lnifmri_prep_qc_report_regtostruc.txt
 
-
-
+###############################################################################################
 # Create an HTML report
 cat << EOR > ${QCDIR}/lnifmri_prep_report.html
 <!DOCTYPE html>
@@ -314,6 +367,8 @@ img {
   position: relative;
   text-align: center;
   color: white;
+  background-color: white;
+
 }
 
 /* Top left text */
@@ -357,22 +412,22 @@ hr.solid {
  <div class="row">
  	<div class="column">
   		<h2>List of Available Subjects:</h2>
-  		<pre>$(cat ${QCDIR}/lnifmri_prep_qcfiles/qc_screen_rawtosubs.txt)</pre>
+  		<pre>$(cat ${QCDIR}/lnifmri_prep_qc_report_rawtosubs.txt)</pre>
 	</div>
   	<div class="column">
   		<h2>List of Processed Subjects:</h2>
-  		<pre>$(cat ${QCDIR}/lnifmri_prep_inputlist.txt)</pre>
+  		<pre>$(cat ${QCDIR}/lnifmri_prep_qc_report_subssdc.txt)</pre>
 	</div>
  </div>
  <div class="row">
   	<div class="column">
   		<h2>Summary of Acq. Parameters:</h2>
-  		<pre>$(cat ${QCDIR}/lnifmri_prep_qcfiles/qc_screen_keyheaders.txt)</pre>
-  		<pre>$(cat ${QCDIR}/lnifmri_prep_qcfiles/qc_screen_formattedtable.txt)</pre>
+  		<pre>$(cat ${QCDIR}/lnifmri_prep_qc_report_keyheaders.txt)</pre>
+  		<pre>$(cat ${QCDIR}/lnifmri_prep_qc_report_formattedtable.txt)</pre>
 	</div>
   	<div class="column">
-  		<h2>List of Excluded Subjects:</h2>
-  		<pre>$(cat ${QCDIR}/lnifmri_prep_qcfiles/qc_screen_purgedsubs.txt)</pre>
+  		<h2>List of Excluded Scans (Code):</h2>
+  		<pre>$(cat ${QCDIR}/lnifmri_prep_qc_report_purgedscans.txt)</pre>
 	</div>
 </div>
 <br><br><br><br>
@@ -380,41 +435,41 @@ hr.solid {
 
 <div id="ACQ" class="tabcontent">
   <h3 style="text-align: center";>Acquisition Parameters</h3>
-  <p style="text-align: center";>Breakpoints mark the inconsistency of a given parameter among subjects</p>
+  <p style="text-align: center";></p>
 <br><br><br>
-  <img src="lnifmri_prep_acqparam_QC.png" alt="ACQPars">
+  <img src="lnifmri_prep_qc_acqpars.png" alt="ACQPars">
 <br><br><br><br>
 </div>
 
 <div id="MOT" class="tabcontent">
   <h3 style="text-align: center";>Estimation of Motion</h3>
-  <p style="text-align: center";>Motion Outliers, In-plane rotations and traslations</p>
+  <p style="text-align: center";>Motion Outliers, In-plane translations and rotations</p>
 <br><br><br>
-  <img src="lnifmri_prep_motion_QC.png" alt="MOTPars" class="responsive">
+  <img src="lnifmri_prep_qc_motion.png" alt="MOTPars" class="responsive">
 <br><br><br><br>
 </div>
 
 <div id="MNI" class="tabcontent">
   <h3 style="text-align: center";>Registration to MNI brain template</h3>
-  <p style="text-align: center";>Brief description</p>
+  <p style="text-align: center";>Functional EPI to Standard Space Template</p>
 <br><br><br>
-  $(cat ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostd.txt)
+  $(cat ${QCDIR}/lnifmri_prep_qc_report_regtostd.txt)
 <br><br><br><br>
 </div>
 
 <div id="T1w" class="tabcontent">
   <h3 style="text-align: center";>Registration to T1w</h3>
-  <p style="text-align: center";>Brief description</p>
+  <p style="text-align: center";>Functional EPI to Subject Space Anatomical Scan</p>
 <br><br><br>
-  $(cat ${QCDIR}/lnifmri_prep_qcfiles/qc_gallery_regtostruc.txt)
+  $(cat ${QCDIR}/lnifmri_prep_qc_report_regtostruc.txt)
 <br><br><br><br>
 </div>
 
 <div id="PWR" class="tabcontent">
   <h3 style="text-align: center";>Power Spectrum of Timeseries</h3>
-  <p style="text-align: center";>Overlay of raw and SD-corrected timeseries</p>
+  <p style="text-align: center";>Overlay of raw and BPF, SD-uncorrected timeseries</p>
 <br><br><br>
-  <img src="lnifmri_prep_pspec_QC.png" alt="PSPECdata">
+  <img src="lnifmri_prep_qc_pspec.png" alt="PSPECdata" class="responsive">
 <br><br><br><br>
 </div>
 
@@ -457,6 +512,20 @@ function sticknav() {
 </body>
 </html> 
 EOR
+
+# ###############################################################################################
+# # Clean up QC folder
+# mkdir -p $QCDIR/lnifmri_prep_qcfiles
+# mv $QCDIR/qc_*.txt $QCDIR/lnifmri_prep_qcfiles/
+# mv $QCDIR/qc_*.png $QCDIR/lnifmri_prep_qcfiles/
+
+# ###############################################################################################
+# # Clean up subID folders 
+# for sID in `cat ${QCDIR}/lnifmri_prep_qcfiles/qc_screen_subs_uniq.txt`; do
+# 	mkdir -p ${sID}/func/lnifmri_prep_files
+# 	ls -d1 ${sID}/func/*.* > ${sID}/func/${sID}_filelist.txt
+# 	xargs mv -t ${sID}/func/lnifmri_prep_files/ < ${sID}/func/${sID}_filelist.txt
+# done
 
 duration=$SECONDS
 printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."

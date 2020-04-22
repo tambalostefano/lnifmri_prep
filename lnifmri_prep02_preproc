@@ -45,109 +45,99 @@ NextStep() {
 [ "$FSLDIR" = "" ] && Usage
 exectime=0
 SECONDS=0
-stamp=`date +'%T'`
 
 Start
 
-# for SUBDIR in sub-*[0-9] ; do
-for SUBDIR in `cat qc/lnifmri_prep_inputlist.txt` ; do
-#cd ${subdir}
-#echo $SUBDIR
-    for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do
+for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 
-        epiname=`$FSLDIR/bin/remove_ext ${epiimg}`
-        # scanname=`basename ${epiimg}`
+    epiname=$($FSLDIR/bin/remove_ext ${epiimg})
+    readarray -d / -t fileparts <<< "${epiimg}"
+    nid=$((${#fileparts[@]}-1))
+    sid=$((${#fileparts[@]}-3))
+    nameID=$(echo ${fileparts[${nid}]})
+    subID=$(echo ${fileparts[${sid}]})
 
-        printf "\tDataset: ${epiname}\n"
+    printf "\tDataset: %s - %s\n" "${subID}" "${nameID}"
 
-        printf "\tReformat JSON file\n"
-        cat ${epiname}.json | tr -d '\n' > ${epiname}_temp1.json
-        sed 's/,\t"/,\n"/g' ${epiname}_temp1.json > ${epiname}_temp2.json
-        cat ${epiname}_temp2.json | tr -d '\t' > ${epiname}_parameters.json
+    printf "\tReformat JSON file\n"
+    cat ${epiname}.json | tr -d '\n' > ${epiname}_temp1.json
+    sed 's/,\t"/,\n"/g' ${epiname}_temp1.json > ${epiname}_temp2.json
+    cat ${epiname}_temp2.json | tr -d '\t' > ${epiname}_parameters.json
 
-        #Store multiband slice timing extracted from JSON
-        awk '$1 ~ /"SliceTiming"/ {print $2}' ${epiname}_parameters.json >> ${epiname}_temp_slicetiming.json
-        cat ${epiname}_temp_slicetiming.json | tr ',[]' '\n' > ${epiname}_slicetiming.txt
+    #Store multiband slice timing extracted from JSON
+    awk '$1 ~ /"SliceTiming"/ {print $2}' ${epiname}_parameters.json >> ${epiname}_temp_slicetiming.json
+    cat ${epiname}_temp_slicetiming.json | tr ',[]' '\n' > ${epiname}_slicetiming.txt
+ 
+    #Extract core parameters from JSON
+    TR=$(awk '$1 ~ /"RepetitionTime"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
 
-        
-        #Extract core parameters from JSON
-        # TR=$(cat ${epiname}.json | sed 's/.*"RepetitionTime": \(.*\),.*/\1/;t;d')
-        TR=$(awk '$1 ~ /"RepetitionTime"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+    #Next steps are self-explanatory
+    # printf "\tDiscarding first 10 vols\n"
+    # $FSLDIR/bin/fslroi $epiimg $epiimg 0 100
 
-        # echo "TR: ${TR}"
+    printf "\tSetting data type\n"
+    $FSLDIR/bin/fslmaths $epiimg $epiimg -odt float 
 
-        #Store multiband slice timing extracted from JSON
-        # cat ${epiname}.json | \
-        # tr -d '\n\t' | \
-        # sed 's/.*"SliceTiming": \[\([^]]*\)\].*/\1/g' | \
-        # tr ',' '\n' > $SUBDIR/func/${scanname}_slicetiming.txt;
-        # awk '/SliceTiming: \[/,/\]/' {epiname}.json | tr -d '[A-z:]' >> $SUBDIR/func/${scanname}_slicetiming.txt
+    printf "\tGrand Mean scaling\n"
+    $FSLDIR/bin/fslmaths $epiimg -ing 1000 $epiimg
 
-        #Next steps are self-explanatory
-        printf "\tDiscarding first 10 vols\n"
-        $FSLDIR/bin/fslroi $epiimg $epiimg 10 -1
+    printf "\tSlice Timing correction\n"
+    $FSLDIR/bin/slicetimer  -i $epiimg \
+                            -o $epiimg \
+                            --odd -r $TR \
+                            --tcustom=${epiname}_slicetiming.txt;
 
-        printf "\tSetting data type\n"
-        $FSLDIR/bin/fslmaths $epiimg $epiimg -odt float 
+    printf "\tMotion Correction\n"
+    $FSLDIR/bin/mcflirt -in $epiimg \
+                        -out ${epiname} \
+                        -meanvol \
+                        -mats -plots \
+                        -rmsrel -rmsabs \
+                        -spline_final;
+    #Plot motion traces
+    $FSLDIR/bin/fsl_tsplot  -i ${epiname}.par \
+                            -t "${subID} estimated rotations (rad)" \
+                            -u 1 --start=1 --finish=3 -a x,y,z -w 660 -h 220 \
+                            --ymin=-0.01 --ymax=0.01 \
+                            -o ${epiname}_rot.png;
+    #Plot motion traces
+    $FSLDIR/bin/fsl_tsplot  -i ${epiname}.par \
+                            -t "${subID} estimated translations (mm)"\
+                            --ymin=-1 --ymax=1 \
+                            -u 1 --start=4 --finish=6 -a x,y,z -w 660 -h 220 \
+                            -o ${epiname}_tra.png;
 
-        printf "\tGrand Mean scaling\n"
-        $FSLDIR/bin/fslmaths $epiimg -ing 1000 $epiimg
+    printf "\tDetecting motion outliers\n\n"
+    $FSLDIR/bin/fsl_motion_outliers -i $epiimg \
+                                    -o ${epiname}_motout.txt \
+                                    -s ${epiname}_motoutdvars.txt \
+                                    --dvars --nomoco;
+    #Plot motion outliers data
+    if [ -f ${epiname}_motout.txt ] ; then
+        # Sum and scale motout file to plot an overlay of DVARS and Temporal Mask            
+        awk '{for(i=1; i<=NF; i++) x+=$i; x=x*100; print x; x=0}' ${epiname}_motout.txt > ${epiname}_motoutscaled.txt
+        paste -d " " ${epiname}_motoutscaled.txt ${epiname}_motoutdvars.txt > ${epiname}_motoutplot.txt
+        $FSLDIR/bin/fsl_tsplot  -i ${epiname}_motoutplot.txt \
+                                -t "${subID} estimated motion outliers (dvars)" \
+                                -a out,dvars -w 660 -h 220 \
+                                --ymin=0 --ymax=100 \
+                                -o ${epiname}_motout.png;
+    else
+        # plot only DVARS
+        $FSLDIR/bin/fsl_tsplot  -i ${epiname}_motoutdvars.txt \
+                                -t "${subID} estimated motion outliers (dvars)" \
+                                -a dvars -w 660 -h 220 \
+                                --ymin=0 --ymax=100 \
+                                -o ${epiname}_motout.png;    
+    fi
 
-        printf "\tSlice Timing correction\n"
-        $FSLDIR/bin/slicetimer  -i $epiimg \
-                                -o $epiimg \
-                                --odd -r $TR \
-                                --tcustom=${epiname}_slicetiming.txt;
-
-        printf "\tMotion Correction\n"
-        $FSLDIR/bin/mcflirt -in $epiimg \
-                            -out $epiimg \
-                            -meanvol \
-                            -mats -plots \
-                            -rmsrel -rmsabs \
-                            -spline_final;
-        #Plot motion traces
-        $FSLDIR/bin/fsl_tsplot  -i ${epiname}.par \
-                                -t "${SUBDIR} estimated rotations (rad)" \
-                                -u 1 --start=1 --finish=3 -a x,y,z -w 640 -h 144 \
-                                --ymin=-0.01 --ymax=0.01 \
-                                -o ${epiname}_rot.png;
-        #Plot motion traces
-        $FSLDIR/bin/fsl_tsplot  -i ${epiname}.par \
-                                -t "${SUBDIR} estimated translations (mm)"\
-                                --ymin=-1 --ymax=1 \
-                                -u 1 --start=4 --finish=6 -a x,y,z -w 640 -h 144 \
-                                -o ${epiname}_tra.png;
-
-        printf "\tDetecting motion outliers\n\n"
-        $FSLDIR/bin/fsl_motion_outliers -i $epiimg \
-                                        -o ${epiname}_motout.txt \
-                                        -s ${epiname}_motoutdvars.txt \
-                                        --dvars --nomoco;
-        #Plot motion outliers data
-        if [ -f ${epiname}_motout.txt ] ; then
-            # Sum and scale motout file to plot an overlay of DVARS and Temporal Mask            
-            awk '{for(i=1; i<=NF; i++) x+=$i; x=x*100; print x; x=0}' ${epiname}_motout.txt > ${epiname}_motoutscaled.txt
-            paste -d " " ${epiname}_motoutscaled.txt ${epiname}_motoutdvars.txt > ${epiname}_motoutplot.txt
-            $FSLDIR/bin/fsl_tsplot  -i ${epiname}_motoutplot.txt \
-                                    -t "${SUBDIR} estimated motion outliers (dvars)" \
-                                    -a out,dvars -w 640 -h 144 \
-                                    --ymin=0 --ymax=100 \
-                                    -o ${epiname}_motout.png;
-        else
-            # plot only DVARS
-            $FSLDIR/bin/fsl_tsplot  -i ${epiname}_motoutdvars.txt \
-                                    -t "${SUBDIR} estimated motion outliers (dvars)" \
-                                    -a dvars -w 640 -h 144 \
-                                    --ymin=0 --ymax=100 \
-                                    -o ${epiname}_motout.png;    
-        fi
-    done #${epiname}
+    printf "\tComplete.\n\n"
 done #for .sub
+
 duration=$SECONDS
 printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."
-
-printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${stamp}" > lnifmri_prep02_greenlight.txt
+stamp=`date +%Y%m%d_%H%M%S`
+printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${stamp}" > .lnifmri_prep02_greenlight.txt
 sleep 2
 
 NextStep
