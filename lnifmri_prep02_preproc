@@ -91,7 +91,7 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
     $FSLDIR/bin/mcflirt -in $epiimg \
                         -out ${epiname} \
                         -meanvol \
-                        -mats -plots \
+                        -stats -plots \
                         -rmsrel -rmsabs \
                         -spline_final;
     #Plot motion traces
