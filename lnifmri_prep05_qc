@@ -91,7 +91,7 @@ for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
 									-y "Power" -x "Frequency (Hz)" \
 									-t "${plotDATA[1]}_${plotDATA[2]} - GMw Power Spectrum - TR(s): ${plotDATA[3]}" \
 									-a raw,bpf -w 660 -h 220 \
-									--ymin=0 --ymax=1.5e+6 \
+									--ymin=0 --ymax=1.5e+7 \
 									--start=1 --finish=2 \
 									-o ${ps};
 			# printf "${subID}: ${ps}\n"		
