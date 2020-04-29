@@ -132,20 +132,19 @@ if [ "$subcount" -gt "2" ]; then
         l=$((${p}+1))
         title=${fields[$p]}
         entry=$(echo "${title}" | tr -dc '[:upper:]')
+        printf -v plot "${QCDIR}/qc_screen_${fields[p]}.png"
         $FSLDIR/bin/fsl_tsplot  -i ${QCDIR}/qc_screen_resnorm.txt \
                            	    -t ${title} -x " " \
                            	    -w 640 -h 144 \
                                 --start=${l} --finish=${l} \
                            	    --ymin=-3 --ymax=3 \
-                           	    -o ${QCDIR}/qc_acqpars_${fields[p]}.png;
-
-        printf -v plot "${QCDIR}/qc_acqpars_${fields[p]}.png"
+                           	    -o ${plot};
         
         [[ -z "$pnglist" ]] && pnglist="${pnglist} ${plot}" || pnglist="${pnglist} - ${plot}"
     done
     $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_qc_acqpars.png
 else
-    printf "\nToo few subjects. Nothing to plot.\n"
+    printf "Too few subjects. Nothing to plot.\n\n"
 fi
 
 #Format table headers

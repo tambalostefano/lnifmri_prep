@@ -23,14 +23,13 @@ UsageFSL() {
 
 Setup() {
     printf "**************************************************************\n"
-    printf "**************************************************************\n"
     printf "LNiF MRI Lab Preprocessing Pipeline\n"
     printf "CIMeC - Center for Mind/Brain Science\n\n"
     printf "Pipeline setup\n\n"
 }
 
 Start() {
-    # clear
+    clear
     stamp=`date +%Y%m%d_%H%M%S`
     printf "**************************************************************\n"
     printf "**************************************************************\n"
@@ -117,10 +116,10 @@ mkdir -p $LOGDIR
 printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${default}" >> ${DIRNAME}/.lnifmri_prep_output.txt
 sleep 2
 
-Start
+# Start
 
 #These are calls to individual tools - lines are self-explanatory
-printf "Creating directory structure\t"
+printf "\nCreating directory structure\t"
 $LNIFMRIDIR/lnifmri_prep00_organize -o ${DIRNAME} >> ${LOGDIR}/00_organize.txt
 duration=$SECONDS
 printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"

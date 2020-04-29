@@ -14,7 +14,7 @@
 export LC_ALL=C
 
 shopt -s extglob
-
+ 
 Usage() {
     printf "\n***************************************************\n"
     printf "LNiF MRI Lab Preprocessing Pipeline\n"
@@ -61,6 +61,9 @@ BOLDDIR="bold"
 RESTDIR="rest"
 DWIDIR="dwi"
 SDCDIR="sdc"
+TOFDIR="tof"
+ASLDIR="asl"
+SWIDIR="swi"
 MISCDIR="misc"
 QCDIR="qc"
 subcount=0
@@ -116,6 +119,9 @@ for SUBRAW in *.sub ; do
             $OUTDIR/$SUBDIR/$FUNCDIR \
             $OUTDIR/$SUBDIR/$DWIDIR \
             $OUTDIR/$SUBDIR/$SDCDIR \
+            $OUTDIR/$SUBDIR/$TOFDIR \
+            $OUTDIR/$SUBDIR/$ASLDIR \
+            $OUTDIR/$SUBDIR/$SWIDIR \
             $OUTDIR/$SUBDIR/$MISCDIR;
 
     #copy dataset into the corresponding directory
@@ -162,6 +168,6 @@ ls -d1 ${OUTDIR}/sub-*/${FUNCDIR}/*.nii.gz > ${OUTDIR}/lnifmri_prep_ep2dlist.txt
 # Create filelist for anatomical processing
 ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*.nii.gz > ${OUTDIR}/lnifmri_prep_anatlist.txt
 # Create filelist for VBM analysis
-ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*.nii.gz > ${OUTDIR}/${QCDIR}/filelist-VBM-template.txt
+ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*.nii.gz > ${OUTDIR}/${QCDIR}/filelist_VBM_template.txt
 
 NextStep

@@ -48,6 +48,7 @@ Start
 
 ###############################################################################################	
 # Compose summary motion report
+
 for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 
     epiname=$($FSLDIR/bin/remove_ext ${epiimg})
@@ -65,14 +66,73 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 	[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
 done
 
-#Create final plot (motion)                       
+# Create final plot
 $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_qc_motion.png
+
+# Create final box-plot with RMS displacement for each scan
+paste -d " " $(ls -d1 `pwd`/sub*/func/*abs.rms | cat) > ${QCDIR}/qc_report_rmsabs_boxplot.txt
+$FSLDIR/bin/fsl_boxplot	-i ${QCDIR}/qc_report_rmsabs_boxplot.txt \
+						--title="Absolute Displacement (mm)" \
+						--ylabel="Abs. RMS (mm)" \
+						--xlabel="Scan Code" \
+						-o ${QCDIR}/qc_report_rmsabs_boxplot.png;
+
+paste -d " " $(ls -d1 `pwd`/sub*/func/*rel.rms | cat) > ${QCDIR}/qc_report_rmsrel_boxplot.txt
+$FSLDIR/bin/fsl_boxplot	-i ${QCDIR}/qc_report_rmsrel_boxplot.txt \
+						--title="Relative Displacement (mm)" \
+						--ylabel="Rel. RMS (mm)" \
+						--xlabel="Scan Code" \
+						-o ${QCDIR}/qc_report_rmsrel_boxplot.png;
+
+$FSLDIR/bin/pngappend ${QCDIR}/qc_report_rmsabs_boxplot.png + ${QCDIR}/qc_report_rmsrel_boxplot.png ${QCDIR}/lnifmri_prep_qc_motion_rms.png
+
+###############################################################################################
+# Compose summary SNR/tSNR report
+
+ls -d1 `pwd`/sub*/func/*tSNR.nii.gz 		> ${QCDIR}/qc_report_tSNRbas_list.txt
+ls -d1 `pwd`/sub*/func/sdc_unc/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRunc_list.txt
+
+$FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRbas `cat ${QCDIR}/qc_report_tSNRbas_list.txt`
+$FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRunc `cat ${QCDIR}/qc_report_tSNRunc_list.txt`
+
+$FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRbas -n -M > ${QCDIR}/qc_report_tSNRbas_boxplot.txt
+$FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRunc -n -M > ${QCDIR}/qc_report_tSNRunc_boxplot.txt
+
+# ls -d1 `pwd`/sub*/func/sdc_fmp/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRfmp_list.txt
+# # If exist fmp data
+# if [[ -s ${QCDIR}/qc_report_tSNRfmp_list.txt  ]]; then
+
+# 	$FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRfmp `cat ${QCDIR}/qc_report_tSNRfmp_list.txt`
+# 	$FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRfmp -n -M > ${QCDIR}/qc_report_tSNRfmp_boxplot.txt
+
+# fi
+
+# ls -d1 `pwd`/sub*/func/sdc_tup/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRtup_list.txt
+# # If exist tup data
+# if [[ -s ${QCDIR}/qc_report_tSNRtup_list.txt  ]]; then
+
+# 	$FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRtup `cat ${QCDIR}/qc_report_tSNRtup_list.txt`
+# 	$FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRtup -n -M > ${QCDIR}/qc_report_tSNRtup_boxplot.txt
+
+# fi
+
+printf "raw\nunc" > ${QCDIR}/qc_report_tSNR_boxplotlegend.txt
+
+# Combine all values in a n-column file to plot
+paste -d " " $(ls -d1 ${QCDIR}/qc_report_tSNR*boxplot.txt) > ${QCDIR}/qc_report_tSNR_boxplot.txt
+$FSLDIR/bin/fsl_boxplot	-i ${QCDIR}/qc_report_tSNR_boxplot.txt \
+						--title="temporal SNR" \
+						--ylabel="tSNR (a.u.)" \
+						--xlabel="Scan Type" \
+						--legend=${QCDIR}/qc_report_tSNR_boxplotlegend.txt \
+						--height=220 \
+						-o ${QCDIR}/lnifmri_prep_qc_tSNR.png;
 
 ###############################################################################################
 # Compose summary power spectra report
 
 for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
-	plots=$(ls -d1 ${subID}/func/sdc_unc/*-spectra.txt)
+	plots=$(ls -d1 ${subID}/func/sdc_unc/*_spectra.txt)
 	pslist=""
 	# In case there is only TASK data	
 	if [ -z "$plots" ]; then
@@ -85,7 +145,7 @@ for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
 			printf -v plotDATAID "${id}%s" "specs.txt"
 			readarray -t plotDATA < "${plotDATAID}"
 			# echo ${plotDATA[@]}
-			ps="${path}/${plotDATA[1]}_${plotDATA[2]}-spectra.png"
+			ps="${path}/${plotDATA[1]}_${plotDATA[2]}_spectra.png"
 			$FSLDIR/bin/fsl_tsplot	-i ${p} \
 									-u ${plotDATA[0]} \
 									-y "Power" -x "Frequency (Hz)" \
@@ -105,78 +165,10 @@ done
 printf -v pspeclist "$( ls -d1 ${QCDIR}/qc_pspec_sub*.png | sed ':a;N;$!ba;s/\n/ - /g' )"
 $FSLDIR/bin/pngappend ${pspeclist} $QCDIR/lnifmri_prep_qc_pspec.png
 
-# ###############################################################################################
-# # Compose summary power spectra report - V2
-
-# for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
-# 	speclist=$(ls -d1 ${subID}/func/sdc_unc/*-spectra.png)
-# 	pslist=""
-# 	# In case there is only TASK data	
-# 	if [ -z "$speclist" ]; then
-# 		printf "${subID}: Power spectra not found!\n"		
-# 	else
-# 		for ps in $speclist ; do
-# 			printf "${subID}: ${ps}\n"		
-
-# 	   		[[ -z "$pslist" ]] && pslist="${pslist} ${ps}" || pslist="${pslist} + ${ps}"
-# 	 	done
-	 	
-# 	 	$FSLDIR/bin/pngappend ${pslist} ${QCDIR}/qc_pspec_${subID}.png
-# 	fi
-# done
-
-# #Create final plot (power spectrum)
-# printf -v pspeclist "$( ls -d1 ${QCDIR}/qc_pspec_sub*.png | sed ':a;N;$!ba;s/\n/ - /g' )"
-# $FSLDIR/bin/pngappend ${pspeclist} $QCDIR/lnifmri_prep_qc_pspec.png
-
-# ###############################################################################################
-# # Compose summary power spectra report - V1 - DEPRECATED
-
-# for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
-# 	speclist=$(ls -d1 ${subID}/func/sdc_unc/*-spectrum.txt)
-	
-# 	# In case there is only TASK data	
-# 	if [ -z "$speclist" ]; then
-
-# 		printf "${subID}: Power spectrum not found!\n"		
-
-# 	else
-# 		# Merge spectra files and plot a subject-wise overlay
-# 	    paste -d " " ${speclist} > ${QCDIR}/qc_${subID}_pspectra.txt
-# 		# Number of spectra available
-# 		last=$(awk '{print NF; exit}' $QCDIR/qc_${subID}_pspectra.txt)
-# 		# Plot a chart for each spectrum
-# 		for i in $(seq 1 ${last}) ; do
-# 			printf -v sesID "ses-%02d" "${i}"	
-# 			TR=$($FSLDIR/bin/fslval ${subID}/func/sdc_unc/${subID}_${sesID}_bold_rest.nii.gz pixdim4)	
-# 			dim=$(cat $QCDIR/qc_${subID}_pspectra.txt | wc -l )
-# 			nyq=$(echo "0.5/${TR}/${dim}" | bc -l )
-# 			printf -v psout "${QCDIR}/qc_${subID}_${sesID}_pspec.png"
-
-# 			$FSLDIR/bin/fsl_tsplot  -i $QCDIR/qc_${subID}_pspectra.txt \
-# 									-u ${nyq} \
-# 		 							-y "Power" -x "Frequency (Hz)" \
-# 			                  	    -t "${subID} GMw Power Spectra (SD-uncorrected data)" \
-# 		 	   	                    -a ${sesID} -w 660 -h 220 \
-# 		 	   	                    --ymin=0 --ymax=1e+6 \
-# 		 	   	                    --start=${i} --finish=${i} \
-# 		 	       		            -o ${psout};
-
-# 	   		[[ -z "$pslist" ]] && pslist="${pslist} ${psout}" || pslist="${pslist} - ${psout}"
-# 	 	done
-
-# 	 	$FSLDIR/bin/pngappend ${pslist} ${QCDIR}/qc_pspec_${subID}.png
-# 	fi
-# done
-
-# #Create final plot (power spectrum)
-# printf -v pspeclist "$( ls -d1 ${QCDIR}/qc_pspec_sub*.png | sed ':a;N;$!ba;s/\n/ + /g' )"
-# $FSLDIR/bin/pngappend ${pspeclist} $QCDIR/lnifmri_prep_qc_pspec.png
-
-
 ###############################################################################################
 # Compose summary SDC methods available for subID
 # Update labels in case some options are missing (FMP, TUP or both)
+
 for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
 	fs="fmp,"
 	ts="tup,"
@@ -193,9 +185,13 @@ done #for subID
 
 ###############################################################################################
 # Create filelist for group-ICA in MNI space
-ls -d1 `pwd`/sub*/func/sdc_fmp/*MNI-smooth.nii.gz > $QCDIR/filelist-groupICA-fmp.txt
-ls -d1 `pwd`/sub*/func/sdc_tup/*MNI-smooth.nii.gz > $QCDIR/filelist-groupICA-tup.txt
-ls -d1 `pwd`/sub*/func/sdc_unc/*MNI-smooth.nii.gz > $QCDIR/filelist-groupICA-unc.txt
+
+ls -d1 `pwd`/sub*/func/sdc_fmp/*MNI-smooth.nii.gz > $QCDIR/filelist_groupICA_fmp.txt
+ls -d1 `pwd`/sub*/func/sdc_tup/*MNI-smooth.nii.gz > $QCDIR/filelist_groupICA_tup.txt
+ls -d1 `pwd`/sub*/func/sdc_unc/*MNI-smooth.nii.gz > $QCDIR/filelist_groupICA_unc.txt
+
+###############################################################################################
+# 20200425 TODO - Create summary table (.csv)
 
 ###############################################################################################
 # Create some utility files for the HTML report
@@ -254,7 +250,7 @@ awk	-F \| '
 
 ###############################################################################################
 # Create an HTML report
-cat << EOR > ${QCDIR}/lnifmri_prep_report.html
+cat << EOR > lnifmri_prep_report.html
 <!DOCTYPE html>
 <html>
 <head>
@@ -430,6 +426,12 @@ hr.solid {
   		<pre>$(cat ${QCDIR}/lnifmri_prep_qc_report_purgedscans.txt)</pre>
 	</div>
 </div>
+ <div class="row">
+  	<div class="column">
+  		<h2>temporal SNR (Raw vs. SDC-unc.)</h2>
+		<img src="${QCDIR}/lnifmri_prep_qc_tSNR.png" alt="tSNR">
+	</div>
+</div>
 <br><br><br><br>
 </div>
 
@@ -437,15 +439,19 @@ hr.solid {
   <h3 style="text-align: center";>Acquisition Parameters</h3>
   <p style="text-align: center";></p>
 <br><br><br>
-  <img src="lnifmri_prep_qc_acqpars.png" alt="ACQPars">
+  <img src="${QCDIR}/lnifmri_prep_qc_acqpars.png" alt="ACQPars">
 <br><br><br><br>
 </div>
 
 <div id="MOT" class="tabcontent">
+  <h3 style="text-align: center";>Estimated mean displacement</h3>
+<br><br><br>
+  <img src="${QCDIR}/lnifmri_prep_qc_motion_rms.png" alt="RMSPars" class="responsive">
+<br><br><br>
   <h3 style="text-align: center";>Estimation of Motion</h3>
   <p style="text-align: center";>Motion Outliers, In-plane translations and rotations</p>
 <br><br><br>
-  <img src="lnifmri_prep_qc_motion.png" alt="MOTPars" class="responsive">
+  <img src="${QCDIR}/lnifmri_prep_qc_motion.png" alt="MOTPars" class="responsive">
 <br><br><br><br>
 </div>
 
@@ -469,7 +475,7 @@ hr.solid {
   <h3 style="text-align: center";>Power Spectrum of Timeseries</h3>
   <p style="text-align: center";>Overlay of raw and BPF, SD-uncorrected timeseries</p>
 <br><br><br>
-  <img src="lnifmri_prep_qc_pspec.png" alt="PSPECdata" class="responsive">
+  <img src="${QCDIR}/lnifmri_prep_qc_pspec.png" alt="PSPECdata" class="responsive">
 <br><br><br><br>
 </div>
 

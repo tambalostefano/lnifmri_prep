@@ -99,8 +99,9 @@ for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
     subID=$(echo ${fileparts[${sid}]})
     sdcID=$(echo ${fileparts[${did}]})	
 	jsonID=$($FSLDIR/bin/remove_ext ${nameID})
-	epivol="${epiname}_SINGLEVOL"
+	# epivol="${epiname}_onevol"
 	outname=""
+	meanimg=${epiname}_meanimg
 
 	#define different images/masks to load
 	printf -v STR "${subID}_ses-01_T1w"
@@ -123,6 +124,9 @@ for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
 	printf "\n%s_ses-%02d:\n" "${subID}" "$(( ++subcount ))"
 
 	TR=$(awk '$1 ~ /"RepetitionTime"/ {print $2}' ${subID}/func/${jsonID}_parameters.json | tr -d ',')
+
+	printf "\tExtracting mean image\n"
+	$FSLDIR/bin/fslmaths ${epiimg} -Tmean ${meanimg}
 
 	printf "\tExtracting WM regressor\n"
 	$FSLDIR/bin/fslmeants -i ${epiimg} -o ${epiname}_regressor_wm.txt -m ${wmstruc}
@@ -167,10 +171,10 @@ for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
 	# Regression of nuisance matrix
 	printf "\tRegression of nuisance signals\n"
 	$FSLDIR/bin/fsl_glm	-i ${epiimg} \
-					-d ${epiname}_nuisance.txt \
-					-o ${epiname}_nuisance_betas \
-					-m ${brainmask} \
-					--out_res=${epiimg} --demean;
+						-d ${epiname}_nuisance.txt \
+						-o ${epiname}_nuisance_betas \
+						-m ${brainmask} \
+						--out_res=${epiimg} --demean;
 
 	#echo "${g}: Noise reduction"
 	#$FSLDIR/bin/susan $epiimg -1 0.6 3 1 1 ${brainmask} -1 $epiimg
@@ -182,8 +186,8 @@ for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
 		
 		#Compute frequency spectrum
 		printf "\tCompute Spectrum before BPF\n"
-		$FSLDIR/bin/fslpspec $epiimg ${epiname}-spectrum_pre
-		$FSLDIR/bin/fslmeants -i ${epiname}-spectrum_pre -o ${epiname}-spectrum_pre.txt  -m ${gmstruc} -w
+		$FSLDIR/bin/fslpspec $epiimg ${epiname}_spectrum_pre
+		$FSLDIR/bin/fslmeants -i ${epiname}_spectrum_pre -o ${epiname}_spectrum_pre.txt  -m ${gmstruc} -w
 
 		# Set BPF cutoff values
 		hp=$( echo "scale=3;1/(2*0.01*${TR})" | bc )	#0.01Hz, sigma: 1/(2*f*TR) as reported in fsl mailing list
@@ -191,31 +195,49 @@ for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
 		
 		# BP filtering
 		printf "\tBandpass filtering (hp=%s, lp=%s)\n" "${hp}" "${lp}"
-		$FSLDIR/bin/fslmaths $epiimg -bptf $hp $lp ${outname}
+		$FSLDIR/bin/fslmaths $epiimg -mas ${brainmask} -bptf $hp $lp ${outname}
 		
 		#Compute frequency spectrum
 		printf "\tCompute Spectrum after BPF\n"
-		$FSLDIR/bin/fslpspec ${outname} ${outname}-spectrum
-		$FSLDIR/bin/fslmeants -i ${outname}-spectrum -o ${outname}-spectrum.txt  -m ${gmstruc} -w
-		dim=$(cat ${outname}-spectrum.txt | wc -l )
+		$FSLDIR/bin/fslpspec ${outname} ${outname}_spectrum
+		$FSLDIR/bin/fslmeants -i ${outname}_spectrum -o ${outname}_spectrum.txt  -m ${gmstruc} -w
+		dim=$(cat ${outname}_spectrum.txt | wc -l )
 		nyq=$(echo "0.5/${TR}/${dim}" | bc -l )
-		printf "${nyq}\n${subID}\n${sesID}\n${TR}" > ${outname}-spectraspecs.txt
-		paste -d " " ${epiname}-spectrum_pre.txt ${outname}-spectrum.txt > ${outname}-spectra.txt
-		# Plot spectra
-		# $FSLDIR/bin/fsl_tsplot	-i ${outname}-spectra.txt \
-		# 						-u $nyq \
-		# 						-y "Power" -x "Frequency (Hz)" \
-		# 						-t "${subID}_${sesID} - GMw Power Spectrum - TR(s): ${TR}" \
-		# 						-a raw,bpf -w 660 -h 220 \
-		# 						--ymin=0 --ymax=1.5e+6 \
-		# 						--start=1 --finish=2 \
-		# 						-o ${outname}-spectra.png;
+		printf "${nyq}\n${subID}\n${sesID}\n${TR}" > ${outname}_spectraspecs.txt
+		paste -d " " ${epiname}_spectrum_pre.txt ${outname}_spectrum.txt > ${outname}_spectra.txt
+	
 	#otherwise skip this step
 	else
 		printf -v outname -- "${outpath}/${subID}_ses-%02d_bold_task" "${subcount}"
 		$FSLDIR/bin/fslmaths $epiimg -mul 1 $outname
 		printf "\tTask-based timeseries: skipping bandpass filter\n\n"
 	fi
+
+    #####################################################################################################
+    # Compute tSNR
+    printf "\tComputing tSNR map\n"
+    # $FSLDIR/bin/fslmaths ${outname} -add ${meanimg} ${outname}_scaled
+    # $FSLDIR/bin/bet ${outname}_scaled ${outname}_tSNR -m -n
+    # $FSLDIR/bin/fslmaths ${outname}_scaled -mul ${outname}_tSNR_mask -Tmean ${outname}_tSNR_mean
+    # $FSLDIR/bin/fslmaths ${outname}_scaled -mul ${outname}_tSNR_mask -Tstd ${outname}_tSNR_std
+    # $FSLDIR/bin/fslmaths ${outname}_tSNR_mean -div ${outname}_tSNR_std -nan ${outname}_tSNR
+    
+    # Add back mean value
+    $FSLDIR/bin/fslmaths 	${outname} -add ${meanimg} ${outname}_scaled
+    
+    $FSLDIR/bin/fslmaths 	${outname}_scaled \
+    						-mul ${brainmask} \
+    						-Tmean ${outname}_tSNR_mean;
+
+    $FSLDIR/bin/fslmaths 	${outname}_scaled \
+    						-mul ${brainmask} \
+    						-Tstd ${outname}_tSNR_std;
+
+    $FSLDIR/bin/fslmaths	${outname}_tSNR_mean \
+    						-div ${outname}_tSNR_std \
+    						-mul ${brainmask} \
+    						-nan ${outname}_tSNR;
+    #####################################################################################################
 
 	#Warping of filtered data to MNI space
 	printf "\tFinal warping of EPI to MNI\n"
@@ -241,8 +263,7 @@ for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
 								--nobet --tr=$TR --mmthresh=0.66 \
 								-d ${comp} \
 								-m ${brainmask} \
-								--report -v > ${outname}-smooth-melodiclog.txt 2>&1 &
-		    #some_cmd > some_file 2>&1 &
+								--report &
 			;;
 		n)
 			printf "\tSkipping SS-ICA\n"

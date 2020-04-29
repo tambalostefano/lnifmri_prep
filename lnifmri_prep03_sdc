@@ -116,7 +116,9 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 	if [ ! -e ${subID}/sdc/lnifmri_prep03_greenlight.txt ]; then
 		# #################################################################################################
 		# PREPARE FIELDMAP
-		if 	[ -e ${subID}/sdc/*gre_field_mapping*e1.nii.gz -a -e ${subID}/sdc/*gre_field_mapping*e2.nii.gz -a -e ${subID}/sdc/*gre_field_mapping*ph.nii.gz ]; then
+		if 	[ -e ${subID}/sdc/*gre_field_mapping*e1.nii.gz -a \
+			  -e ${subID}/sdc/*gre_field_mapping*e2.nii.gz -a \
+			  -e ${subID}/sdc/*gre_field_mapping*ph.nii.gz ]; then
 			printf "\tPreparing fielmap\n"
 			runfmap=1
 			#Set array to store Echo Times
@@ -184,18 +186,16 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 		stamp=`date +%Y%m%d_%H%M%S`
 		printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${stamp}" > ${subID}/sdc/lnifmri_prep03_greenlight.txt
 	fi
+
 	#################################################################################################
 	# UNWARPING OF EPI
 	#Load bold EPI scan
-	epivol="${epiname}_SINGLEVOL"
+	epivol="${epiname}_onevol"
 	$FSLDIR/bin/fslroi ${epiimg} ${epivol} 30 1
 	
 	printf "\tScan Name: ${subID} - ${nameID}\n"
 
 	#Extract core parameters from JSON
-	# echosp=$(cat ${epiname}.json | sed 's/.*"DerivedVendorReportedEchoSpacing": \(.*\),.*/\1/;t;d')
-	# phenc=$(cat ${epiname}.json | sed 's/.*"PhaseEncodingDirection": "\(.*\)".*/\1/;t;d')
-	
 	echosp=$(awk '$1 ~ /"DerivedVendorReportedEchoSpacing"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
     phenc=$(awk '$1 ~ /"PhaseEncodingDirection"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
 	
@@ -205,19 +205,6 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 		&& pedir="-y" \
 		|| pedir="y";
 		
-	# case ${phenc} in
-	# 	#AP
-	# 	"j-")
-	# 		pedir="-y"
-	# 	;;
-	# 	#PA
-	# 	"j")
-	# 		pedir="y"
-	# 	;;
-	# esac
-
-	# echo ${pedir}
-
 	##########################################################################################
 	#
 	#	Fieldmap method
@@ -230,8 +217,6 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 		[ ! -d ${subID}/func/sdc_fmp ] && { mkdir -m 777 ${subID}/func/sdc_fmp; }
 		FMAPDIR=${subID}/func/sdc_fmp
 		printf "\n\tSaving fieldmap unwarped data to: $FMAPDIR\n"
-		#Select 1st volume of EPI timeseries to reduce processing time
-		#$FSLDIR/bin/fslroi ${epiimg} ${epivol} 30 1
 
 		#Call epi_reg w/fieldmap est. (Single step)
 		printf "\tRunning epi_reg\n\n"
@@ -245,14 +230,6 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 							--t1=${t1struc} \
 							--t1brain=${bstruc} \
 							--out=$FMAPDIR/${nameIDnoext};
-
-		# #Calculate Jacobian coefficient of epi_reg warp to T1
-		# $FSLDIR/bin/fnirtfileutils -i ${epiname}_fmap_epireg_warp \
-		# 	-r ${t1struc} \
-		# 	-f spline \
-		# 	-o ${epiname}_fmap_epireg_warpcoeff;
-		# $FSLDIR/bin/fnirtfileutils -i ${epiname}_fmap_epireg_warpcoeff \
-		# 	-j ${epiname}_fmap_epireg_warpjac;
 
 		printf "\n\tWarping EPI to T1\n"
 		$FSLDIR/bin/applywarp	-i ${epiimg} \
@@ -275,14 +252,6 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 								--warp2=${subID}/${STR}.anat/T1_to_MNI_nonlin_field.nii.gz \
 								-j $FMAPDIR/${nameIDnoext}_jac2MNI.nii.gz \
 								-o $FMAPDIR/${nameIDnoext}_warp2MNI.nii.gz;
-
-		# printf "\tWarping EPI to MNI\n"
-		# $FSLDIR/bin/applywarp	-i ${epiimg} \
-		# 						-r ${std} \
-		# 						-w $FMAPDIR/${nameIDnoext}_warp2MNI.nii.gz \
-		# 						--interp=spline \
-		# 						-o $FMAPDIR/${nameIDnoext}_wrp2std.nii.gz;
-		# $FSLDIR/bin/fslroi $FMAPDIR/${nameIDnoext}_wrp2std ${epiname}_fmap_checkwarpedtostd 30 1
 
 		printf "\tWarping EPI to MNI\n"
 		$FSLDIR/bin/applywarp	-i ${epivol} \
@@ -308,7 +277,6 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 		TUPDIR=${subID}/func/sdc_tup
 		printf "\n\tSaving TOPUP unwarped data to: $TUPDIR\n"
 		#Extract core parameters from JSON
-		# acqmtxpe=$(cat ./${epiname}.json | sed 's/.*"AcquisitionMatrixPE": \(.*\),.*/\1/;t;d')
 		acqmtxpe=$(awk '$1 ~ /"AcquisitionMatrixPE"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
 		totreadtime=`echo "scale=4;${echosp}*(${acqmtxpe}-1)" | bc -l`
 
@@ -318,19 +286,6 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 		[ $phenc == "\"j-\"" ] \
 			&& printf "0 -1 0 ${totreadtime}\n0 1 0 ${totreadtime}\n" >> ${par} \
 			|| printf "0 1 0 ${totreadtime}\n0 -1 0 ${totreadtime}\n" >> ${par};
-
-		# case $phenc in
-		# 	#AP
-		# 	"j-")
-		# 		#pedir="-y"
-		# 		printf "0 -1 0 ${totreadtime}\n0 1 0 ${totreadtime}\n" >> ${par}
-		# 	;;
-		# 	#PA
-		# 	"j")
-		# 		#pedir="y"
-		# 		printf "0 1 0 ${totreadtime}\n0 -1 0 ${totreadtime}\n" >> ${par}
-		# 	;;
-		# esac
 
 		printf "\tRunning topup\n"
 		$FSLDIR/bin/topup	--imain=${subID}/sdc/ep2d_topup_fieldmap.nii.gz \
@@ -342,13 +297,13 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 		#Hz to rad/s
 		printf "\tConverting FMAP values: Hz -> rad/s\n"
 		$FSLDIR/bin/fslmaths $TUPDIR/${nameIDnoext}_field -mul 6.2832 $TUPDIR/${nameIDnoext}_field_rads
-	    $FSLDIR/bin/fslroi $TUPDIR/${nameIDnoext}_unw $TUPDIR/${nameIDnoext}_unw_SINGLEVOL 0 1
-	    $FSLDIR/bin/bet	$TUPDIR/${nameIDnoext}_unw_SINGLEVOL $TUPDIR/${nameIDnoext}_unw_SINGLEVOL_brain \
+	    $FSLDIR/bin/fslroi $TUPDIR/${nameIDnoext}_unw $TUPDIR/${nameIDnoext}_unw_onevol 0 1
+	    $FSLDIR/bin/bet	$TUPDIR/${nameIDnoext}_unw_onevol $TUPDIR/${nameIDnoext}_unw_onevol_brain \
 	    				-f 0.4 \
 	    				-g 0.1 \
 	    				-R;
 	    #Erode brain-extracted image to exclude noisy voxels
-	    $FSLDIR/bin/fslmaths $TUPDIR/${nameIDnoext}_unw_SINGLEVOL_brain -ero $TUPDIR/${nameIDnoext}_unw_SINGLEVOL_brain_eroded
+	    $FSLDIR/bin/fslmaths $TUPDIR/${nameIDnoext}_unw_onevol_brain -ero $TUPDIR/${nameIDnoext}_unw_onevol_brain_eroded
 
 		printf "\tRunning epi_reg with topup fieldmap\n\n"
 		$FSLDIR/bin/epi_reg	--epi=${epivol} \
@@ -356,20 +311,12 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 							--t1brain=${bstruc} \
 							--wmseg=${wmstruc} \
 							--fmap=$TUPDIR/${nameIDnoext}_field_rads \
-							--fmapmag=$TUPDIR/${nameIDnoext}_unw_SINGLEVOL \
-							--fmapmagbrain=$TUPDIR/${nameIDnoext}_unw_SINGLEVOL_brain_eroded \
+							--fmapmag=$TUPDIR/${nameIDnoext}_unw_onevol \
+							--fmapmagbrain=$TUPDIR/${nameIDnoext}_unw_onevol_brain_eroded \
 							--echospacing=${echosp} \
 							--pedir=${pedir} \
 							--out=$TUPDIR/${nameIDnoext};
 
-		# #Calculate Jacobian coefficient of epi_reg warp to T1
-		# $FSLDIR/bin/fnirtfileutils -i ${epiname}_topup_epireg_warp \
-		# 	-r ${t1struc} \
-		# 	-f spline \
-		# 	-o ${epiname}_topup_epireg_warpcoeff;
-		# $FSLDIR/bin/fnirtfileutils -i ${epiname}_topup_epireg_warpcoeff \
-		# 	-j ${epiname}_topup_epireg_warpjac;
-			
 		printf "\n\tWarping EPI to T1\n"
 		$FSLDIR/bin/applywarp	-i ${epiimg} \
 								-r ${t1struc} \
@@ -391,21 +338,12 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 								-j $TUPDIR/${nameIDnoext}_jac2MNI.nii.gz \
 								-o $TUPDIR/${nameIDnoext}_warp2MNI.nii.gz;
 
-		# printf "\tWarping EPI to MNI\n"
-		# $FSLDIR/bin/applywarp	-i ${epiimg} \
-		# 						-r ${std} \
-		# 						-w $TUPDIR/${nameIDnoext}_warp2MNI.nii.gz \
-		# 						--interp=spline \
-		# 						-o $TUPDIR/${nameIDnoext}_wrp2std.nii.gz;
-		# $FSLDIR/bin/fslroi $TUPDIR/${nameIDnoext}_wrp2std ${epiname}_tup_checkwarpedtostd 30 1
-
 		printf "\tWarping EPI to MNI\n"
 		$FSLDIR/bin/applywarp	-i ${epivol} \
 								-r ${std} \
 								-w $TUPDIR/${nameIDnoext}_warp2MNI.nii.gz \
 								--interp=spline \
 								-o ${epiname}_tup_checkwarpedtostd;
-		#$FSLDIR/bin/fslroi $TUPDIR/${nameIDnoext}_wrp2std ${epiname}_tup_checkwarpedtostd 30 1
 
 		printf "\tTOPUP SDC DONE.\n"
 	fi
@@ -426,14 +364,6 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 						--t1brain=${bstruc} \
 						--wmseg=${wmstruc} \
 						--out=$UNCDIR/${nameIDnoext};
-
-	# #Calculate Jacobian coefficient of epi_reg warp to T1
-	# $FSLDIR/bin/fnirtfileutils -i ${epiname}_uncorr_epireg_warp \
-	# 	-r ${t1struc} \
-	# 	-f spline \
-	# 	-o ${epiname}_uncorr_epireg_warpcoeff;
-	# $FSLDIR/bin/fnirtfileutils -i ${epiname}_uncorr_epireg_warpcoeff \
-	# 	-j ${epiname}_uncorr_epireg_warpjac;
 
 	printf "\n\tRegistration of EPI to T1\n"
 	$FSLDIR/bin/flirt	-in ${epiimg} \
@@ -456,22 +386,13 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 							--warp2=${subID}/${STR}.anat/T1_to_MNI_nonlin_field.nii.gz \
 							-j $UNCDIR/${nameIDnoext}_jac2MNI.nii.gz \
 							-o $UNCDIR/${nameIDnoext}_warp2MNI.nii.gz;
-
-	# printf "\tWarping EPI to MNI\n"
-	# $FSLDIR/bin/applywarp	-i ${epiimg} \
-	# 						-r ${std} \
-	# 						-w $UNCDIR/${nameIDnoext}_warp2MNI.nii.gz \
-	# 						--interp=spline \
-	# 						-o $UNCDIR/${nameIDnoext}_wrp2std.nii.gz;
-	# $FSLDIR/bin/fslroi $UNCDIR/${nameIDnoext}_wrp2std ${epiname}_unc_checkwarpedtostd 30 1
-
+  
 	printf "\tWarping EPI to MNI\n"
 	$FSLDIR/bin/applywarp	-i ${epivol} \
 							-r ${std} \
 							-w $UNCDIR/${nameIDnoext}_warp2MNI.nii.gz \
 							--interp=spline \
 							-o ${epiname}_unc_checkwarpedtostd;
-	#$FSLDIR/bin/fslroi $UNCDIR/${nameIDnoext}_wrp2std ${epiname}_unc_checkwarpedtostd 30 1
 
 	printf "\tnonlinreg SDC DONE.\n\n"
 

@@ -45,6 +45,7 @@ NextStep() {
 [ "$FSLDIR" = "" ] && Usage
 exectime=0
 SECONDS=0
+cursubID="none"
 
 Start
 
@@ -56,6 +57,14 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
     sid=$((${#fileparts[@]}-3))
     nameID=$(echo ${fileparts[${nid}]})
     subID=$(echo ${fileparts[${sid}]})
+    
+    # Check to restart the ses-XX counter
+    if [[ "${cursubID}" != "${subID}" ]]; then
+        subcount=0
+        cursubID=${subID}
+    fi
+    
+    printf -v sesID "ses-%02d" "$(( ++subcount ))"
 
     printf "\tDataset: %s - %s\n" "${subID}" "${nameID}"
 
@@ -74,7 +83,7 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
     #Next steps are self-explanatory
     # printf "\tDiscarding first 10 vols\n"
     # $FSLDIR/bin/fslroi $epiimg $epiimg 0 100
-
+    
     printf "\tSetting data type\n"
     $FSLDIR/bin/fslmaths $epiimg $epiimg -odt float 
 
@@ -87,6 +96,28 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
                             --odd -r $TR \
                             --tcustom=${epiname}_slicetiming.txt;
 
+    #####################################################################################################
+    # Compute tSNR
+    printf "\tComputing tSNR map\n"
+    # $FSLDIR/bin/bet ${epiimg} ${epiname}_tSNR -m -n
+    # $FSLDIR/bin/fslmaths $epiimg -mul ${epiname}_tSNR_mask -Tmean ${epiname}_tSNR_mean
+    # $FSLDIR/bin/fslmaths $epiimg -mul ${epiname}_tSNR_mask -Tstd ${epiname}_tSNR_std
+    # $FSLDIR/bin/fslmaths ${epiname}_tSNR_mean -div ${epiname}_tSNR_std -nan ${epiname}_tSNR
+    
+    $FSLDIR/bin/fslmaths $epiimg -Tmean ${epiname}_tSNR_mean
+    
+    $FSLDIR/bin/bet ${epiname}_tSNR_mean ${epiname}_tSNR -m -n
+    
+    $FSLDIR/bin/fslmaths    $epiimg \
+                            -mul ${epiname}_tSNR_mask \
+                            -Tstd ${epiname}_tSNR_std;
+
+    $FSLDIR/bin/fslmaths    ${epiname}_tSNR_mean \
+                            -div ${epiname}_tSNR_std \
+                            -mul ${epiname}_tSNR_mask \
+                            -nan ${epiname}_tSNR;
+    #####################################################################################################
+
     printf "\tMotion Correction\n"
     $FSLDIR/bin/mcflirt -in $epiimg \
                         -out ${epiname} \
@@ -96,13 +127,13 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
                         -spline_final;
     #Plot motion traces
     $FSLDIR/bin/fsl_tsplot  -i ${epiname}.par \
-                            -t "${subID} estimated rotations (rad)" \
+                            -t "${subID}_${sesID} estimated rotations (rad)" \
                             -u 1 --start=1 --finish=3 -a x,y,z -w 660 -h 220 \
                             --ymin=-0.01 --ymax=0.01 \
                             -o ${epiname}_rot.png;
     #Plot motion traces
     $FSLDIR/bin/fsl_tsplot  -i ${epiname}.par \
-                            -t "${subID} estimated translations (mm)"\
+                            -t "${subID}_${sesID} estimated translations (mm)"\
                             --ymin=-1 --ymax=1 \
                             -u 1 --start=4 --finish=6 -a x,y,z -w 660 -h 220 \
                             -o ${epiname}_tra.png;
@@ -116,16 +147,16 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
     if [ -f ${epiname}_motout.txt ] ; then
         # Sum and scale motout file to plot an overlay of DVARS and Temporal Mask            
         awk '{for(i=1; i<=NF; i++) x+=$i; x=x*100; print x; x=0}' ${epiname}_motout.txt > ${epiname}_motoutscaled.txt
-        paste -d " " ${epiname}_motoutscaled.txt ${epiname}_motoutdvars.txt > ${epiname}_motoutplot.txt
+        paste -d " " ${epiname}_motoutdvars.txt ${epiname}_motoutscaled.txt > ${epiname}_motoutplot.txt
         $FSLDIR/bin/fsl_tsplot  -i ${epiname}_motoutplot.txt \
-                                -t "${subID} estimated motion outliers (dvars)" \
+                                -t "${subID}_${sesID} estimated motion outliers (dvars)" \
                                 -a out,dvars -w 660 -h 220 \
                                 --ymin=0 --ymax=100 \
                                 -o ${epiname}_motout.png;
     else
         # plot only DVARS
         $FSLDIR/bin/fsl_tsplot  -i ${epiname}_motoutdvars.txt \
-                                -t "${subID} estimated motion outliers (dvars)" \
+                                -t "${subID}_${sesID} estimated motion outliers (dvars)" \
                                 -a dvars -w 660 -h 220 \
                                 --ymin=0 --ymax=100 \
                                 -o ${epiname}_motout.png;    
