@@ -52,6 +52,7 @@ Prompt() {
 exectime=0
 SECONDS=0
 QCDIR=`pwd`/qc
+LOGDIR=`pwd`/logs
 pnglist=""
 
 Start
@@ -195,6 +196,7 @@ while true; do
                 # Prepare input list for other scripts
                 printf "\nPopulating input list..."
                 printf "%s" "${check}" > ${QCDIR}/qc_screen_purgedscans.txt
+                printf "Excluded scans (code): %s\n" "${check}">> ${LOGDIR}/00_userinput.txt
                 awk 'NR == FNR{ a[$1] = 1; next } !a[$1] {print $2}' ${QCDIR}/qc_screen_purgedscans.txt ${QCDIR}/qc_screen_scans.txt > lnifmri_prep_inputlist.txt
                 printf "done.\nStarting workflow...\n\n"
                 exit 1;;

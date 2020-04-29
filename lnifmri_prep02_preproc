@@ -45,6 +45,7 @@ NextStep() {
 [ "$FSLDIR" = "" ] && Usage
 exectime=0
 SECONDS=0
+LOGDIR=`pwd`/logs
 cursubID="none"
 
 Start
@@ -155,7 +156,8 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
                                 -o ${epiname}_motout.png;
     else
         # plot only DVARS
-        $FSLDIR/bin/fsl_tsplot  -i ${epiname}_motoutdvars.txt \
+        cp ${epiname}_motoutdvars.txt ${epiname}_motoutplot.txt
+        $FSLDIR/bin/fsl_tsplot  -i ${epiname}_motoutplot.txt \
                                 -t "${subID}_${sesID} estimated motion outliers (dvars)" \
                                 -a dvars -w 660 -h 220 \
                                 --ymin=0 --ymax=100 \

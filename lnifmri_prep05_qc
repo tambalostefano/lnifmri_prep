@@ -42,6 +42,7 @@ exectime=0
 SECONDS=0
 pnglist=""
 QCDIR=`pwd`/qc
+LOGDIR=`pwd`/logs
 stamp=`date +%Y%m%d_%H%M%S`
 
 Start
@@ -101,19 +102,15 @@ $FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRunc -n -M > ${QCDIR}/qc_report_tS
 # ls -d1 `pwd`/sub*/func/sdc_fmp/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRfmp_list.txt
 # # If exist fmp data
 # if [[ -s ${QCDIR}/qc_report_tSNRfmp_list.txt  ]]; then
-
 # 	$FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRfmp `cat ${QCDIR}/qc_report_tSNRfmp_list.txt`
 # 	$FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRfmp -n -M > ${QCDIR}/qc_report_tSNRfmp_boxplot.txt
-
 # fi
 
 # ls -d1 `pwd`/sub*/func/sdc_tup/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRtup_list.txt
 # # If exist tup data
 # if [[ -s ${QCDIR}/qc_report_tSNRtup_list.txt  ]]; then
-
 # 	$FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRtup `cat ${QCDIR}/qc_report_tSNRtup_list.txt`
 # 	$FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRtup -n -M > ${QCDIR}/qc_report_tSNRtup_boxplot.txt
-
 # fi
 
 printf "raw\nunc" > ${QCDIR}/qc_report_tSNR_boxplotlegend.txt
@@ -186,12 +183,34 @@ done #for subID
 ###############################################################################################
 # Create filelist for group-ICA in MNI space
 
-ls -d1 `pwd`/sub*/func/sdc_fmp/*MNI-smooth.nii.gz > $QCDIR/filelist_groupICA_fmp.txt
-ls -d1 `pwd`/sub*/func/sdc_tup/*MNI-smooth.nii.gz > $QCDIR/filelist_groupICA_tup.txt
-ls -d1 `pwd`/sub*/func/sdc_unc/*MNI-smooth.nii.gz > $QCDIR/filelist_groupICA_unc.txt
+ls -d1 `pwd`/sub*/func/sdc_fmp/*MNI-smooth.nii.gz > filelist_groupICA_fmp.txt
+ls -d1 `pwd`/sub*/func/sdc_tup/*MNI-smooth.nii.gz > filelist_groupICA_tup.txt
+ls -d1 `pwd`/sub*/func/sdc_unc/*MNI-smooth.nii.gz > filelist_groupICA_unc.txt
+
+###############################################################################################
+# Create filelist for motion parameters files in subject space
+
+ls -d1 `pwd`/sub*/func/*.par > ${QCDIR}/filelist_motionparameters.txt
+ls -d1 `pwd`/sub*/func/*motoutplot.txt > ${QCDIR}/filelist_motiondvars.txt
 
 ###############################################################################################
 # 20200425 TODO - Create summary table (.csv)
+
+# for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
+
+#     epiname=$($FSLDIR/bin/remove_ext ${epiimg})
+    
+#     readarray -d / -t fileparts <<< "${epiimg}"
+#     sid=$((${#fileparts[@]}-3))
+#     subID=$(echo ${fileparts[${sid}]})
+
+# 	# Compose a single-subject record of motion parameters
+# 	par=${epiname}.par
+# 	[[ -s ${epiname}_motout.txt ]] && out=${epiname}_motout.txt;
+# 	# Compute average value for col 1:3 and 4:6 of $par
+# 	awk '{for (i=1; i<=NF; i++) { sum[i]+= $i }} END {for (i=1; i<=NF; i++ ) {printf "%f \n", sum[i]/NR}}' ${par} >> ${QCDIR}/lnifmri_prep_qc_report_motsum.txt
+
+# done
 
 ###############################################################################################
 # Create some utility files for the HTML report

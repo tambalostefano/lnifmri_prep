@@ -81,6 +81,7 @@ done
 
 exectime=0
 SECONDS=0
+LOGDIR=`pwd`/logs
 cursubID="none"
 cudsdc="none"
 

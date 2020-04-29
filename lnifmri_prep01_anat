@@ -41,6 +41,7 @@ NextStep() {
 [ "$FSLDIR" = "" ] && Usage
 exectime=0
 SECONDS=0
+LOGDIR=`pwd`/logs
 stamp=`date +'%T'`
 
 Start

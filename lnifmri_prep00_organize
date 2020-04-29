@@ -81,6 +81,7 @@ while getopts o: option
 
 #Set fullpath of DIRNAME
 OUTDIR=$DATAPATH/$DIRNAME
+LOGDIR=$DATAPATH/$DIRNAME/logs
 exectime=0
 SECONDS=0
 stamp=`date +%Y%m%d_%H%M%S`
@@ -167,7 +168,9 @@ rm -rf dcmlist.txt
 ls -d1 ${OUTDIR}/sub-*/${FUNCDIR}/*.nii.gz > ${OUTDIR}/lnifmri_prep_ep2dlist.txt
 # Create filelist for anatomical processing
 ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*.nii.gz > ${OUTDIR}/lnifmri_prep_anatlist.txt
+# Create filelist for diffusion processing
+# ls -d1 ${OUTDIR}/sub-*/${DWIDIR}/*.nii.gz > ${OUTDIR}/lnifmri_prep_dwilist.txt
 # Create filelist for VBM analysis
-ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*.nii.gz > ${OUTDIR}/${QCDIR}/filelist_VBM_template.txt
+ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*.nii.gz > ${OUTDIR}/filelist_VBM_template.txt
 
 NextStep

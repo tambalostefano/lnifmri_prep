@@ -116,6 +116,9 @@ mkdir -p $LOGDIR
 printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${default}" >> ${DIRNAME}/.lnifmri_prep_output.txt
 sleep 2
 
+
+printf "User input log - %s\n\nOutput Dir.: %s\nRun Motion Outliers Deweighting of timeseries? %s\nRun SS-ICA? %s\n" \
+        "${default}" "${DIRNAME}" "${ansmot}" "${ansica}" > ${LOGDIR}/00_userinput.txt
 # Start
 
 #These are calls to individual tools - lines are self-explanatory
@@ -166,7 +169,7 @@ if [[ -s ./lnifmri_prep_inputlist.txt  ]]; then
 
     SECONDS=0
     printf "\tNuis. regr. and BP filter"
-    $LNIFMRIDIR/lnifmri_prep04_filter ${opts} >> ${LOGDIR}/04_nuisancefilter.txt
+    $LNIFMRIDIR/lnifmri_prep04_filter ${opts} >> ${LOGDIR}/04_filter.txt
     duration=$SECONDS
     printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
     elapsed=$(echo $elapsed + $duration | bc)
