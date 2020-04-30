@@ -26,10 +26,11 @@ Usage() {
 }
 
 Start() {
+    stamp=`date +%Y%m%d_%H%M%S`
     printf "\n***************************************************\n"
     printf "LNiF MRI Lab Preprocessing Pipeline\n"
     printf "CIMeC - Center for Mind/Brain Science\n\n"
-    printf "Process functional data (motion correction)\n"    
+    printf "Process functional data (motion correction)\n\n"    
 
 }
 
@@ -46,6 +47,7 @@ NextStep() {
 exectime=0
 SECONDS=0
 LOGDIR=`pwd`/logs
+QCDIR=`pwd`/qc
 cursubID="none"
 
 Start
@@ -117,6 +119,7 @@ for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
                             -div ${epiname}_tSNR_std \
                             -mul ${epiname}_tSNR_mask \
                             -nan ${epiname}_tSNR;
+
     #####################################################################################################
 
     printf "\tMotion Correction\n"

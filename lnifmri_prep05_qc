@@ -23,6 +23,7 @@ UsageFSL() {
 }
 
 Start() {
+    stamp=`date +%Y%m%d_%H%M%S`	
     printf "\n***************************************************\n"
     printf "LNiF MRI Lab Preprocessing Pipeline\n"
     printf "CIMeC - Center for Mind/Brain Science\n\n"
@@ -40,7 +41,6 @@ NextStep() {
 [ "$FSLDIR" = "" ] && UsageFSL
 exectime=0
 SECONDS=0
-pnglist=""
 QCDIR=`pwd`/qc
 LOGDIR=`pwd`/logs
 stamp=`date +%Y%m%d_%H%M%S`
@@ -49,7 +49,7 @@ Start
 
 ###############################################################################################	
 # Compose summary motion report
-
+pnglist=""
 for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
 
     epiname=$($FSLDIR/bin/remove_ext ${epiimg})
@@ -90,8 +90,8 @@ $FSLDIR/bin/pngappend ${QCDIR}/qc_report_rmsabs_boxplot.png + ${QCDIR}/qc_report
 ###############################################################################################
 # Compose summary SNR/tSNR report
 
-ls -d1 `pwd`/sub*/func/*tSNR.nii.gz 		> ${QCDIR}/qc_report_tSNRbas_list.txt
-ls -d1 `pwd`/sub*/func/sdc_unc/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRunc_list.txt
+# ls -d1 `pwd`/sub*/func/*tSNR.nii.gz 		> ${QCDIR}/qc_report_tSNRbas_list.txt
+# ls -d1 `pwd`/sub*/func/sdc_unc/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRunc_list.txt
 
 $FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRbas `cat ${QCDIR}/qc_report_tSNRbas_list.txt`
 $FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRunc `cat ${QCDIR}/qc_report_tSNRunc_list.txt`
@@ -123,7 +123,41 @@ $FSLDIR/bin/fsl_boxplot	-i ${QCDIR}/qc_report_tSNR_boxplot.txt \
 						--xlabel="Scan Type" \
 						--legend=${QCDIR}/qc_report_tSNR_boxplotlegend.txt \
 						--height=220 \
-						-o ${QCDIR}/lnifmri_prep_qc_tSNR.png;
+						-o ${QCDIR}/lnifmri_prep_qc_tSNR_boxplot.png;
+
+pnglist=""
+for epiimg in `cat ${QCDIR}/qc_report_tSNRbas_list.txt` ; do
+
+    epiname=$($FSLDIR/bin/remove_ext ${epiimg})    
+    readarray -d / -t fileparts <<< "${epiimg}"
+    sid=$((${#fileparts[@]}-3))
+    subID=$(echo ${fileparts[${sid}]})
+    str="${QCDIR}/qc_report_tSNRbas_${subID}.png"
+	$FSLDIR/bin/fsleyes render  --scene lightbox -ss 3 -hc -hl \
+								-cb -cbl right -ls 9 -cbi 50 -p 3 \
+    	                        --outfile ${str} \
+            	                ${epiimg} -dr 66 99% -cm red-yellow;
+   	[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
+done
+$FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/qc_report_tSNRbas.png
+
+pnglist=""
+for epiimg in `cat ${QCDIR}/qc_report_tSNRunc_list.txt` ; do
+	
+    epiname=$($FSLDIR/bin/remove_ext ${epiimg})    
+    readarray -d / -t fileparts <<< "${epiimg}"
+    sid=$((${#fileparts[@]}-4))
+    subID=$(echo ${fileparts[${sid}]})
+    str="${QCDIR}/qc_report_tSNRunc_${subID}.png"
+	$FSLDIR/bin/fsleyes render  --scene lightbox -ss 3 -hc -hl \
+								-cb -cbl right -ls 9 -cbi 50 -p 3 \
+    	                        --outfile ${str} \
+            	                ${epiimg} -dr 66 99% -cm red-yellow;
+   	[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
+done
+$FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/qc_report_tSNRunc.png
+
+$FSLDIR/bin/pngappend ${QCDIR}/qc_report_tSNRbas.png + ${QCDIR}/qc_report_tSNRunc.png ${QCDIR}/lnifmri_prep_qc_tSNR_lightbox.png
 
 ###############################################################################################
 # Compose summary power spectra report
@@ -326,7 +360,7 @@ img {
   cursor: pointer;
   padding: 14px 16px;
   font-size: 18px;
-  width: 16.66%;
+  width: 14.25%;
   display: table-cell;
 }
 
@@ -414,6 +448,7 @@ hr.solid {
 <button class="tablink" onclick="openPage('T1w', this, 'white')">T1w</button>
 <button class="tablink" onclick="openPage('MOT', this, 'white')">MOTCO</button>
 <button class="tablink" onclick="openPage('PWR', this, 'white')">PWR</button>
+<button class="tablink" onclick="openPage('tSNR', this, 'white')">tSNR</button>
 </div>
 
 <!--
@@ -448,7 +483,7 @@ hr.solid {
  <div class="row">
   	<div class="column">
   		<h2>temporal SNR (Raw vs. SDC-unc.)</h2>
-		<img src="${QCDIR}/lnifmri_prep_qc_tSNR.png" alt="tSNR">
+		<img src="${QCDIR}/lnifmri_prep_qc_tSNR_boxplot.png" alt="tSNR">
 	</div>
 </div>
 <br><br><br><br>
@@ -495,6 +530,14 @@ hr.solid {
   <p style="text-align: center";>Overlay of raw and BPF, SD-uncorrected timeseries</p>
 <br><br><br>
   <img src="${QCDIR}/lnifmri_prep_qc_pspec.png" alt="PSPECdata" class="responsive">
+<br><br><br><br>
+</div>
+
+<div id="tSNR" class="tabcontent">
+  <h3 style="text-align: center";>temporal SNR of Timeseries</h3>
+  <p style="text-align: center";>Raw and Preprocessed, SD-uncorrected timeseries</p>
+<br><br><br>
+  <img src="${QCDIR}/lnifmri_prep_qc_tSNR_lightbox.png" alt="tSNR" class="responsive">
 <br><br><br><br>
 </div>
 

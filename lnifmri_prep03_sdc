@@ -26,6 +26,7 @@ Usage() {
 [ "$FSLDIR" = "" ] && Usage
 
 Start() {
+	stamp=`date +%Y%m%d_%H%M%S`
     printf "\n***************************************************\n"
     printf "LNiF MRI Lab Preprocessing Pipeline\n"
     printf "CIMeC - Center for Mind/Brain Science\n\n"
