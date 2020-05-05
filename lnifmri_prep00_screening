@@ -70,7 +70,7 @@ declare numpars
 printf "Parsing acquisition parameters\n"    
 
 subcount=0
-for epiimg in `cat lnifmri_prep_ep2dlist.txt`; do
+for epiimg in `cat ${LOGDIR}/lnifmri_prep_ep2dlist.txt`; do
 # for SUBDIR in sub-*[0-9] ; do
     # for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do
         epiname=$($FSLDIR/bin/remove_ext ${epiimg})
@@ -161,7 +161,7 @@ printf "\n" >> ${QCDIR}/qc_screen_headers.txt
 paste -d " " ${QCDIR}/qc_screen_rows.txt ${QCDIR}/qc_screen_rawfunc.txt > ${QCDIR}/qc_screen_table.txt
 #Print table headers
 cat ${QCDIR}/qc_screen_headers.txt ${QCDIR}/qc_screen_table.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/qc_screen_formattedtable.txt
-paste -d " " ${QCDIR}/qc_screen_code.txt lnifmri_prep_ep2dlist.txt > ${QCDIR}/qc_screen_scans.txt
+paste -d " " ${QCDIR}/qc_screen_code.txt ${LOGDIR}/lnifmri_prep_ep2dlist.txt > ${QCDIR}/qc_screen_scans.txt
 
 while true; do
     # clear
@@ -197,7 +197,7 @@ while true; do
                 printf "\nPopulating input list..."
                 printf "%s" "${check}" > ${QCDIR}/qc_screen_purgedscans.txt
                 printf "Excluded scans (code): %s\n" "${check}">> ${LOGDIR}/00_userinput.txt
-                awk 'NR == FNR{ a[$1] = 1; next } !a[$1] {print $2}' ${QCDIR}/qc_screen_purgedscans.txt ${QCDIR}/qc_screen_scans.txt > lnifmri_prep_inputlist.txt
+                awk 'NR == FNR{ a[$1] = 1; next } !a[$1] {print $2}' ${QCDIR}/qc_screen_purgedscans.txt ${QCDIR}/qc_screen_scans.txt > ${LOGDIR}/lnifmri_prep_inputlist.txt
                 printf "done.\nStarting workflow...\n\n"
                 exit 1;;
 

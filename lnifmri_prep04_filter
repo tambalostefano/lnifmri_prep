@@ -88,7 +88,7 @@ cudsdc="none"
 
 Start
 
-for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
+for epiimg in `cat ${LOGDIR}/lnifmri_prep_sdclist.txt` ; do
 
     epiname=$($FSLDIR/bin/remove_ext ${epiimg})
 	outpath=$(dirname ${epiimg})
@@ -259,10 +259,13 @@ for epiimg in `cat lnifmri_prep_sdclist.txt` ; do
 	case "${runica}" in
 		y)
 			comp=40
-			printf "\tRunning ICA (n=${comp})\n"
-			$FSLDIR/bin/melodic	-i ${outname}-smooth \
-								-o ${outname}-smooth.ica \
-								--nobet --tr=$TR --mmthresh=0.66 \
+			in=${outname}-smooth
+			out=${outname}-smooth.ica
+			printf "\tRunning ICA (n=%s)\n" "${comp}"
+			printf "${out}" >> ${LOGDIR}/lnifmri_prep_ssicalist.txt
+			$FSLDIR/bin/melodic	-i ${in} \
+								-o  ${out} \
+								--nobet --tr=${TR} --mmthresh=0.66 \
 								-d ${comp} \
 								-m ${brainmask} \
 								--report &

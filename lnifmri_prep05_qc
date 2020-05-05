@@ -50,7 +50,7 @@ Start
 ###############################################################################################	
 # Compose summary motion report
 pnglist=""
-for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
+for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 
     epiname=$($FSLDIR/bin/remove_ext ${epiimg})
     
@@ -90,14 +90,19 @@ $FSLDIR/bin/pngappend ${QCDIR}/qc_report_rmsabs_boxplot.png + ${QCDIR}/qc_report
 ###############################################################################################
 # Compose summary SNR/tSNR report
 
-# ls -d1 `pwd`/sub*/func/*tSNR.nii.gz 		> ${QCDIR}/qc_report_tSNRbas_list.txt
-# ls -d1 `pwd`/sub*/func/sdc_unc/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRunc_list.txt
+ls -d1 `pwd`/sub*/func/*tSNR.nii.gz 		> ${QCDIR}/qc_report_tSNRbas_list.txt
+ls -d1 `pwd`/sub*/func/sdc_unc/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRunc_list.txt
 
 $FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRbas `cat ${QCDIR}/qc_report_tSNRbas_list.txt`
 $FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRunc `cat ${QCDIR}/qc_report_tSNRunc_list.txt`
 
 $FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRbas -n -M > ${QCDIR}/qc_report_tSNRbas_boxplot.txt
 $FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRunc -n -M > ${QCDIR}/qc_report_tSNRunc_boxplot.txt
+
+# min value of tSNR (to scale lightbox colorbars)
+mR=$($FSLDIR/bin/fslstats ${QCDIR}/qc_report_tSNRbas -r | awk '{print $1}')
+# max value of tSNR (to scale lightbox colorbars)
+MR=$($FSLDIR/bin/fslstats ${QCDIR}/qc_report_tSNRunc -r | awk '{print $2}')
 
 # ls -d1 `pwd`/sub*/func/sdc_fmp/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRfmp_list.txt
 # # If exist fmp data
@@ -136,7 +141,7 @@ for epiimg in `cat ${QCDIR}/qc_report_tSNRbas_list.txt` ; do
 	$FSLDIR/bin/fsleyes render  --scene lightbox -ss 3 -hc -hl \
 								-cb -cbl right -ls 9 -cbi 50 -p 3 \
     	                        --outfile ${str} \
-            	                ${epiimg} -dr 66 99% -cm red-yellow;
+            	                ${epiimg} -dr ${mR} ${MR} -cm red-yellow;
    	[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
 done
 $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/qc_report_tSNRbas.png
@@ -144,16 +149,17 @@ $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/qc_report_tSNRbas.png
 pnglist=""
 for epiimg in `cat ${QCDIR}/qc_report_tSNRunc_list.txt` ; do
 	
-    epiname=$($FSLDIR/bin/remove_ext ${epiimg})    
+    epiname=$($FSLDIR/bin/remove_ext ${epiimg})
     readarray -d / -t fileparts <<< "${epiimg}"
     sid=$((${#fileparts[@]}-4))
     subID=$(echo ${fileparts[${sid}]})
     str="${QCDIR}/qc_report_tSNRunc_${subID}.png"
-	$FSLDIR/bin/fsleyes render  --scene lightbox -ss 3 -hc -hl \
-								-cb -cbl right -ls 9 -cbi 50 -p 3 \
-    	                        --outfile ${str} \
-            	                ${epiimg} -dr 66 99% -cm red-yellow;
-   	[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
+    $FSLDIR/bin/fsleyes render  --scene lightbox -ss 3 -hc -hl \
+    							-cb -cbl right -ls 9 -cbi 50 -p 3 \
+    							--outfile ${str} \
+    							${epiimg} -dr ${mR} ${MR} -cm red-yellow;
+
+	[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
 done
 $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/qc_report_tSNRunc.png
 
@@ -493,7 +499,7 @@ hr.solid {
   <h3 style="text-align: center";>Acquisition Parameters</h3>
   <p style="text-align: center";></p>
 <br><br><br>
-  <img src="${QCDIR}/lnifmri_prep_qc_acqpars.png" alt="ACQPars">
+  <img src="${QCDIR}/lnifmri_prep_qc_acqpars.png" alt="ACQPars - Data Not Available">
 <br><br><br><br>
 </div>
 
