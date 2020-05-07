@@ -94,9 +94,10 @@ for DCMDIR in `cat lnifmri_prep_dcmlist.txt` ; do
     printf "${DCMDIR}: DICOM to NIFTI conversion\n"
     #check if current directory is an output dir from lnifmri_prep;
     #if not, run the DCM to NII conversion of image files
-    if [ -f ${DCMDIR}/.lnifmri_prep_output.txt ]; then
+    if [ -f "${DCMDIR}/.lnifmri_prep_output.txt" ]; then
         
         printf "\t${DCMDIR}: not a raw DICOM folder.\n"
+
     else
 
     	dcm2niix -f %f_%p_%t_%s -b y -ba n -z y ${DCMDIR}

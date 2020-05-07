@@ -107,7 +107,7 @@ anat=""
 #If DIRNAME exists add a timestamp
 [ -d $DIRNAME ] && { DIRNAME=${default}_${DIRNAME}; printf "\n\t*** Directory exists ***\nOutput dir now set to: ${DIRNAME}"; }
 #List all DCM directories of subjects data
-ls -d1 `pwd`/* > lnifmri_prep_dcmlist.txt
+find `pwd`/ -mindepth 1 -maxdepth 1 -type d > lnifmri_prep_dcmlist.txt
 #Create output directory
 mkdir -p $DIRNAME 
 mkdir -p $LOGDIR
@@ -128,11 +128,6 @@ Output Directory: ${DIRNAME}
 Run Motion Outliers Deweighting of timeseries? ${ansmot}
 
 Run SS-ICA? ${ansica}
-
-
-(c) stefano.tambalo@unitn.it, 2020.
-**************************************************************
-**************************************************************
 EOL
 
 ##############################################################################
@@ -153,6 +148,12 @@ duration=$SECONDS
 printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
 elapsed=$(echo $elapsed + $duration | bc)
 
+# Close user input log file
+printf "\n(c) stefano.tambalo@unitn.it, 2020.\n" >> ${LOGDIR}/lnifmri_prep00_inputlog.txt
+printf "**************************************************************\n" >> ${LOGDIR}/lnifmri_prep00_inputlog.txt
+printf "**************************************************************\n\n" >> ${LOGDIR}/lnifmri_prep00_inputlog.txt
+
+# Start pipeline
 clear
 Start
 

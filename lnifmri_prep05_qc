@@ -87,6 +87,34 @@ $FSLDIR/bin/fsl_boxplot	-i ${QCDIR}/qc_report_rmsrel_boxplot.txt \
 
 $FSLDIR/bin/pngappend ${QCDIR}/qc_report_rmsabs_boxplot.png + ${QCDIR}/qc_report_rmsrel_boxplot.png ${QCDIR}/lnifmri_prep_qc_motion_rms.png
 
+# Compose table headers for motion RMS data table
+printf "%s\t%s\t%s\t%s\t%s\n" "SubID" "SesID" "aRMS(mm)" "rRMS(mm)" "nOut" > ${QCDIR}/qc_motion_rms_table_header.txt
+# Final rendering of motion RMS data table
+cat ${QCDIR}/qc_motion_rms_table_header.txt ${QCDIR}/qc_motion_rms_table.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/lnifmri_prep_qc_report_motion_table.txt
+
+# Compose common table headers for descriptive stats data
+printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "SubID" "SesID" "Par" "#Vol" "Sum" "Avg" "Med" "StD" "min" "MAX" > ${QCDIR}/qc_report_motion_dstats_header.txt
+
+###############################################################################################
+# Here consider only full data (X, Y, Z)
+printf "%s\n%s\n%s\n%s\n%s\n%s\n" "Rot X(rad)" "Rot Y(rad)" "Rot Z(rad)" "Tra X(mm)" "Tra Y(mm)" "Tra Z(mm)" > ${QCDIR}/qc_report_motion_dstats_full_par.txt
+for d in `ls -d1 ${QCDIR}/qc_motion_*_dstats_full.txt`; do
+	paste -d "\t" ${d%.txt}_subseskey.txt ${QCDIR}/qc_report_motion_dstats_full_par.txt ${d} >> ${QCDIR}/qc_report_motion_dstats_full_temp.txt
+done
+cat ${QCDIR}/qc_report_motion_dstats_header.txt ${QCDIR}/qc_report_motion_dstats_full_temp.txt > ${QCDIR}/qc_report_motion_dstats_full.txt
+# Final rendering of dstats
+cat ${QCDIR}/qc_report_motion_dstats_full.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/lnifmri_prep_qc_report_motion_dstats_full.txt
+
+###############################################################################################
+# Here consider only compact data (X, Y, Z)
+printf "%s\n%s\n" "AvgRot XYZ (rad)" "AvgTra XYZ (mm)" > ${QCDIR}/qc_report_motion_dstats_compact_par.txt
+for d in `ls -d1 ${QCDIR}/qc_motion_*_dstats_compact.txt`; do
+	paste -d "\t" ${d%.txt}_subseskey.txt ${QCDIR}/qc_report_motion_dstats_compact_par.txt ${d} >> ${QCDIR}/qc_report_motion_dstats_compact_temp.txt
+done
+cat ${QCDIR}/qc_report_motion_dstats_header.txt ${QCDIR}/qc_report_motion_dstats_compact_temp.txt > ${QCDIR}/qc_report_motion_dstats_compact.txt
+# Final rendering of dstats
+cat ${QCDIR}/qc_report_motion_dstats_compact.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/lnifmri_prep_qc_report_motion_dstats_compact.txt
+
 ###############################################################################################
 # Compose summary SNR/tSNR report
 
@@ -490,6 +518,10 @@ hr.solid {
   	<div class="column">
   		<h2>temporal SNR (Raw vs. SDC-unc.)</h2>
 		<img src="${QCDIR}/lnifmri_prep_qc_tSNR_boxplot.png" alt="tSNR">
+	</div>
+	<div class="column">
+  		<h2>Summary RAW motion data</h2>
+		<pre>$(cat ${QCDIR}/lnifmri_prep_qc_report_motion_table.txt)</pre>
 	</div>
 </div>
 <br><br><br><br>

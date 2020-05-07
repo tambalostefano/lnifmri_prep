@@ -71,7 +71,7 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 
     printf "\tDataset: %s - %s\n" "${subID}" "${nameID}"
 
-    printf "\tReformat JSON file\n"
+    # printf "\tReformat JSON file\n"
     cat ${epiname}.json | tr -d '\n' > ${epiname}_temp1.json
     sed 's/,\t"/,\n"/g' ${epiname}_temp1.json > ${epiname}_temp2.json
     cat ${epiname}_temp2.json | tr -d '\t' > ${epiname}_parameters.json
@@ -129,6 +129,14 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
                         -stats -plots \
                         -rmsrel -rmsabs \
                         -spline_final;
+    
+    # Mean absolute RMS displacement
+    mabs=$(cat ${epiname}_abs_mean.rms)
+    # Mean relative RMS displacement
+    mrel=$(cat ${epiname}_rel_mean.rms)
+    # Number of outliers
+    nout=0
+
     #Plot motion traces
     $FSLDIR/bin/fsl_tsplot  -i ${epiname}.par \
                             -t "${subID}_${sesID} estimated rotations (rad)" \
@@ -142,7 +150,7 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
                             -u 1 --start=4 --finish=6 -a x,y,z -w 660 -h 220 \
                             -o ${epiname}_tra.png;
 
-    printf "\tDetecting motion outliers\n\n"
+    printf "\tDetecting motion outliers\n"
     $FSLDIR/bin/fsl_motion_outliers -i $epiimg \
                                     -o ${epiname}_motout.txt \
                                     -s ${epiname}_motoutdvars.txt \
@@ -157,6 +165,8 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
                                 -a out,dvars -w 660 -h 220 \
                                 --ymin=0 --ymax=100 \
                                 -o ${epiname}_motout.png;
+        # Store number of outliers 
+        nout=$(sort ${epiname}_motoutscaled.txt | uniq -c | awk 'NR>1 {print $1}')
     else
         # plot only DVARS
         cp ${epiname}_motoutdvars.txt ${epiname}_motoutplot.txt
@@ -167,8 +177,59 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
                                 -o ${epiname}_motout.png;    
     fi
 
+    printf "\tLogging motion data\n\n"
+    ######################################
+    # Descr. stat. data
+    # see code from "lnifmri_util_dstats"
+    ######################################
+    arg="${epiname}.par"
+    cmp="${epiname}_compactpar.txt"
+    argout="qc_motion_${subID}_${sesID}_dstats_full"
+    cmpout="qc_motion_${subID}_${sesID}_dstats_compact"
+    # Compute average rotation and traslation and save to a "compact" output file
+    awk '{ a=(($1+$2+$3)/3); b=(($4+$5+$6)/3); printf "%.8f\t%.8f\n", a, b}' ${arg} > ${cmp}
+
+    input[0]=${arg}
+    input[1]=${cmp}
+    output[0]=${argout}
+    output[1]=${cmpout}
+
+    for x in "${!input[@]}"; do
+        file=${input[$x]}
+        dstats=${output[$x]}
+        # Get number of columns
+        COL=$(awk '{print NF; exit}' ${file})
+        # Cycle through columns
+        for (( i=1; i<=${COL}; i++ )); do
+            # sort the current column and compute values
+            sort -g -k ${i} ${file} | \
+            awk -v f="${i}" \
+            '{  col=$f;
+                a[c++]=col;
+                sum+=col;
+                sumsq += col^2;
+            }
+            END {
+                avg = sum/c;
+                std = sqrt((sumsq-sum^2/c)/c);
+                if ((c % 2) == 1) {
+                    med = a[int(c/2)];}
+                else {
+                    med = ( a[c/2] + a[c/2-1] ) / 2;}
+                {printf "%s\t%.8f\t%.8f\t%.8f\t%.8f\t%.8f\t%.8f\n", c, sum, avg, med, std, a[0], a[c-1]};
+            }' >> ${QCDIR}/${dstats}.txt
+
+            printf "%s\t%s\n" "${subID}" "${sesID}" >> ${QCDIR}/${dstats}_subseskey.txt
+        done
+    done #input
+
+    ######################################
+    # FD RMS data
+    ######################################
+    printf "%s\t%s\t%.4f\t%.4f\t%06s\n" "${subID}" "${sesID}" "${mabs}" "${mrel}" "${nout}" >> ${QCDIR}/qc_motion_rms_table.txt
     printf "\tComplete.\n\n"
-done #for .sub
+
+done #subject in inputlist
 
 duration=$SECONDS
 printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."
