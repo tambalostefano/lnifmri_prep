@@ -47,7 +47,12 @@ stamp=`date +%Y%m%d_%H%M%S`
 
 Start
 
+
 ###############################################################################################	
+# MOTION Section
+###############################################################################################	
+
+###############################################################################################
 # Compose summary motion report
 pnglist=""
 for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
@@ -63,13 +68,14 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 	tra=${epiname}_tra.png
 	mot=${epiname}_motout.png
 	# Link 3 motion charts in a single row
-	printf -v str  "%s + %s + %s" "$mot" "$tra" "$rot" 
+	printf -v str  "%s + %s + %s" "$mot" "$rot" "$tra" 
 	[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
 done
 
 # Create final plot
 $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_qc_motion.png
 
+###############################################################################################
 # Create final box-plot with RMS displacement for each scan
 paste -d " " $(ls -d1 `pwd`/sub*/func/*abs.rms | cat) > ${QCDIR}/qc_report_rmsabs_boxplot.txt
 $FSLDIR/bin/fsl_boxplot	-i ${QCDIR}/qc_report_rmsabs_boxplot.txt \
@@ -90,12 +96,12 @@ $FSLDIR/bin/pngappend ${QCDIR}/qc_report_rmsabs_boxplot.png + ${QCDIR}/qc_report
 # Compose table headers for motion RMS data table
 printf "%s\t%s\t%s\t%s\t%s\n" "SubID" "SesID" "aRMS(mm)" "rRMS(mm)" "nOut" > ${QCDIR}/qc_motion_rms_table_header.txt
 # Final rendering of motion RMS data table
-cat ${QCDIR}/qc_motion_rms_table_header.txt ${QCDIR}/qc_motion_rms_table.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/lnifmri_prep_qc_report_motion_table.txt
+cat ${QCDIR}/qc_motion_rms_table_header.txt ${QCDIR}/qc_motion_rms_table.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/lnifmri_prep_qc_report_motion_rms.txt
 
+###############################################################################################
 # Compose common table headers for descriptive stats data
 printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "SubID" "SesID" "Par" "#Vol" "Sum" "Avg" "Med" "StD" "min" "MAX" > ${QCDIR}/qc_report_motion_dstats_header.txt
 
-###############################################################################################
 # Here consider only full data (X, Y, Z)
 printf "%s\n%s\n%s\n%s\n%s\n%s\n" "Rot X(rad)" "Rot Y(rad)" "Rot Z(rad)" "Tra X(mm)" "Tra Y(mm)" "Tra Z(mm)" > ${QCDIR}/qc_report_motion_dstats_full_par.txt
 for d in `ls -d1 ${QCDIR}/qc_motion_*_dstats_full.txt`; do
@@ -105,7 +111,6 @@ cat ${QCDIR}/qc_report_motion_dstats_header.txt ${QCDIR}/qc_report_motion_dstats
 # Final rendering of dstats
 cat ${QCDIR}/qc_report_motion_dstats_full.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/lnifmri_prep_qc_report_motion_dstats_full.txt
 
-###############################################################################################
 # Here consider only compact data (X, Y, Z)
 printf "%s\n%s\n" "AvgRot XYZ (rad)" "AvgTra XYZ (mm)" > ${QCDIR}/qc_report_motion_dstats_compact_par.txt
 for d in `ls -d1 ${QCDIR}/qc_motion_*_dstats_compact.txt`; do
@@ -158,6 +163,7 @@ $FSLDIR/bin/fsl_boxplot	-i ${QCDIR}/qc_report_tSNR_boxplot.txt \
 						--height=220 \
 						-o ${QCDIR}/lnifmri_prep_qc_tSNR_boxplot.png;
 
+# Combine all tSNR maps in a lightbox view
 pnglist=""
 for epiimg in `cat ${QCDIR}/qc_report_tSNRbas_list.txt` ; do
 
@@ -193,6 +199,10 @@ $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/qc_report_tSNRunc.png
 
 $FSLDIR/bin/pngappend ${QCDIR}/qc_report_tSNRbas.png + ${QCDIR}/qc_report_tSNRunc.png ${QCDIR}/lnifmri_prep_qc_tSNR_lightbox.png
 
+###############################################################################################	
+# POWER SPECTRUM Section
+###############################################################################################	
+
 ###############################################################################################
 # Compose summary power spectra report
 
@@ -223,12 +233,16 @@ for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
 	   		[[ -z "$pslist" ]] && pslist="${pslist} ${ps}" || pslist="${pslist} + ${ps}"
    		done
 	fi
- 	$FSLDIR/bin/pngappend ${pslist} ${QCDIR}/qc_pspec_${subID}.png
+ 	$FSLDIR/bin/pngappend ${pslist} ${QCDIR}/qc_report_pspec_${subID}.png
 done
 
 #Create final plot (power spectrum)
-printf -v pspeclist "$( ls -d1 ${QCDIR}/qc_pspec_sub*.png | sed ':a;N;$!ba;s/\n/ - /g' )"
+printf -v pspeclist "$( ls -d1 ${QCDIR}/qc_report_pspec_sub*.png | sed ':a;N;$!ba;s/\n/ - /g' )"
 $FSLDIR/bin/pngappend ${pspeclist} $QCDIR/lnifmri_prep_qc_pspec.png
+
+###############################################################################################	
+# SDC Section
+###############################################################################################	
 
 ###############################################################################################
 # Compose summary SDC methods available for subID
@@ -261,24 +275,9 @@ ls -d1 `pwd`/sub*/func/sdc_unc/*MNI-smooth.nii.gz > filelist_groupICA_unc.txt
 ls -d1 `pwd`/sub*/func/*.par > ${QCDIR}/filelist_motionparameters.txt
 ls -d1 `pwd`/sub*/func/*motoutplot.txt > ${QCDIR}/filelist_motiondvars.txt
 
-###############################################################################################
-# 20200425 TODO - Create summary table (.csv)
-
-# for epiimg in `cat lnifmri_prep_inputlist.txt` ; do
-
-#     epiname=$($FSLDIR/bin/remove_ext ${epiimg})
-    
-#     readarray -d / -t fileparts <<< "${epiimg}"
-#     sid=$((${#fileparts[@]}-3))
-#     subID=$(echo ${fileparts[${sid}]})
-
-# 	# Compose a single-subject record of motion parameters
-# 	par=${epiname}.par
-# 	[[ -s ${epiname}_motout.txt ]] && out=${epiname}_motout.txt;
-# 	# Compute average value for col 1:3 and 4:6 of $par
-# 	awk '{for (i=1; i<=NF; i++) { sum[i]+= $i }} END {for (i=1; i<=NF; i++ ) {printf "%f \n", sum[i]/NR}}' ${par} >> ${QCDIR}/lnifmri_prep_qc_report_motsum.txt
-
-# done
+###############################################################################################	
+# HTML Section
+###############################################################################################	
 
 ###############################################################################################
 # Create some utility files for the HTML report
@@ -295,45 +294,45 @@ printf "%s ->\n" `ls -d1 ../*.sub` > ${QCDIR}/qc_screen_rawsubs.txt
 paste ${QCDIR}/qc_screen_rawsubs.txt ${QCDIR}/qc_screen_subs_uniq.txt > ${QCDIR}/lnifmri_prep_qc_report_rawtosubs.txt
 
 # List to populate registration gallery to std
-ls -d1 ${QCDIR}/lnifmri_prep_func2std_QC/*sub-*.png > ${QCDIR}/qc_gallery_regtostd_images.txt
-for s in `cat ${QCDIR}/qc_gallery_regtostd_images.txt`; do
+ls -d1 ${QCDIR}/lnifmri_prep_func2std_QC/*sub-*.png > ${QCDIR}/qc_report_regtostd_images.txt
+for s in `cat ${QCDIR}/qc_report_regtostd_images.txt`; do
 	case "${s}" in
 		*fmap*)
-			printf "%s(fmp)\n" `grep -oP "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_gallery_regtostd_captions.txt
+			printf "%s(fmp)\n" `grep -oP "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_report_regtostd_captions.txt
 		;;
 		*tup*)
-			printf "%s(tup)\n" `grep -oP "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_gallery_regtostd_captions.txt
+			printf "%s(tup)\n" `grep -oP "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_report_regtostd_captions.txt
 		;;
 		*unc*)
-			printf "%s(unc)\n" `grep -oP "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_gallery_regtostd_captions.txt
+			printf "%s(unc)\n" `grep -oP "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_report_regtostd_captions.txt
 		;;
 	esac
 done
-paste -d "|" ${QCDIR}/qc_gallery_regtostd_images.txt ${QCDIR}/qc_gallery_regtostd_captions.txt > ${QCDIR}/qc_gallery_regtostd_media.txt
+paste -d "|" ${QCDIR}/qc_report_regtostd_images.txt ${QCDIR}/qc_report_regtostd_captions.txt > ${QCDIR}/qc_report_regtostd_media.txt
 awk	-F \| '
 	{printf "<div class=\"container\">\n\t<img src=\"%s\" alt=\"Reg2Std\" class=\"responsive\">\n\t<div class=\"top-left\">%s</div>\n</div>\n", $1, $2}' \
-	${QCDIR}/qc_gallery_regtostd_media.txt > ${QCDIR}/lnifmri_prep_qc_report_regtostd.txt
+	${QCDIR}/qc_report_regtostd_media.txt > ${QCDIR}/lnifmri_prep_qc_report_regtostd.txt
 
 # List to populate registration gallery to struc 
-ls -d1 ${QCDIR}/lnifmri_prep_func2struc_QC/*sub-*.png > ${QCDIR}/qc_gallery_regtostruc_images.txt
-for s in `cat ${QCDIR}/qc_gallery_regtostruc_images.txt`; do
+ls -d1 ${QCDIR}/lnifmri_prep_func2struc_QC/*sub-*.png > ${QCDIR}/qc_report_regtostruc_images.txt
+for s in `cat ${QCDIR}/qc_report_regtostruc_images.txt`; do
 	case "${s}" in
 		*fmap*)
-			printf "%s(fmp)\n" `grep -oP -m 1 "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_gallery_regtostruc_captions_temp.txt
+			printf "%s(fmp)\n" `grep -oP -m 1 "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_report_regtostruc_captions_temp.txt
 		;;
 		*tup*)
-			printf "%s(tup)\n" `grep -oP -m 1 "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_gallery_regtostruc_captions_temp.txt
+			printf "%s(tup)\n" `grep -oP -m 1 "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_report_regtostruc_captions_temp.txt
 		;;
 		*unc*)
-			printf "%s(unc)\n" `grep -oP -m 1 "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_gallery_regtostruc_captions_temp.txt
+			printf "%s(unc)\n" `grep -oP -m 1 "sub-[0-9][0-9]" <<< ${s}` >>  ${QCDIR}/qc_report_regtostruc_captions_temp.txt
 		;;
 	esac
 done
-uniq ${QCDIR}/qc_gallery_regtostruc_captions_temp.txt > ${QCDIR}/qc_gallery_regtostruc_captions.txt
-paste -d "|" ${QCDIR}/qc_gallery_regtostruc_images.txt ${QCDIR}/qc_gallery_regtostruc_captions.txt > ${QCDIR}/qc_gallery_regtostruc_media.txt
+uniq ${QCDIR}/qc_report_regtostruc_captions_temp.txt > ${QCDIR}/qc_report_regtostruc_captions.txt
+paste -d "|" ${QCDIR}/qc_report_regtostruc_images.txt ${QCDIR}/qc_report_regtostruc_captions.txt > ${QCDIR}/qc_report_regtostruc_media.txt
 awk	-F \| '
 	{printf "<div class=\"container\">\n\t<img src=\"%s\" alt=\"Reg2Std\" class=\"responsive\">\n\t<div class=\"top-left\">%s</div>\n</div>\n", $1, $2}' \
-	${QCDIR}/qc_gallery_regtostruc_media.txt > ${QCDIR}/lnifmri_prep_qc_report_regtostruc.txt
+	${QCDIR}/qc_report_regtostruc_media.txt > ${QCDIR}/lnifmri_prep_qc_report_regtostruc.txt
 
 ###############################################################################################
 # Create an HTML report
@@ -394,7 +393,7 @@ img {
   cursor: pointer;
   padding: 14px 16px;
   font-size: 18px;
-  width: 14.25%;
+  width: 16.66%;
   display: table-cell;
 }
 
@@ -476,8 +475,12 @@ hr.solid {
 </div>
 
 <div id="navbar">
-<button class="tablink" onclick="openPage('REP', this, 'white')" id="defaultOpen">REPORT</button>
+<button class="tablink" onclick="openPage('GEN', this, 'white')" id="defaultOpen">GENERAL</button>
+<!--
+####################################################################### HIDDEN BUTTON
 <button class="tablink" onclick="openPage('ACQ', this, 'white')">ACQP</button>
+################################################################ END OF HIDDEN BUTTON
+-->
 <button class="tablink" onclick="openPage('MNI', this, 'white')">MNI</button>
 <button class="tablink" onclick="openPage('T1w', this, 'white')">T1w</button>
 <button class="tablink" onclick="openPage('MOT', this, 'white')">MOTCO</button>
@@ -489,9 +492,9 @@ hr.solid {
 <hr class="solid">
 -->
 
-<div id="REP" class="tabcontent">
+<div id="GEN" class="tabcontent">
 <br>
-  <p style="text-align: center;"><b>Output dir</b>: $(pwd); <b>Timestamp</b>: ${stamp}</p>
+  <p style="text-align: center;"><b>Output dir</b>: $(pwd)</p>
  <br>
  <div class="row">
  	<div class="column">
@@ -516,17 +519,19 @@ hr.solid {
 </div>
  <div class="row">
   	<div class="column">
-  		<h2>temporal SNR (Raw vs. SDC-unc.)</h2>
+  		<h2>temporal SNR (RAW vs. SDC-unc.)</h2>
 		<img src="${QCDIR}/lnifmri_prep_qc_tSNR_boxplot.png" alt="tSNR">
 	</div>
 	<div class="column">
-  		<h2>Summary RAW motion data</h2>
-		<pre>$(cat ${QCDIR}/lnifmri_prep_qc_report_motion_table.txt)</pre>
+  		<h2>Summary of RAW motion data</h2>
+		<pre>$(cat ${QCDIR}/lnifmri_prep_qc_report_motion_rms.txt)</pre>
 	</div>
 </div>
 <br><br><br><br>
 </div>
 
+<!--
+############################################################################ HIDDEN TAB
 <div id="ACQ" class="tabcontent">
   <h3 style="text-align: center";>Acquisition Parameters</h3>
   <p style="text-align: center";></p>
@@ -534,6 +539,8 @@ hr.solid {
   <img src="${QCDIR}/lnifmri_prep_qc_acqpars.png" alt="ACQPars - Data Not Available">
 <br><br><br><br>
 </div>
+##################################################################### END OF HIDDEN TAB
+--> 
 
 <div id="MOT" class="tabcontent">
   <h3 style="text-align: center";>Estimated mean displacement</h3>
@@ -580,7 +587,7 @@ hr.solid {
 </div>
 
 <div class="footer">
-  <p>LNiF MRI Lab @ CIMeC, UniTN - Via delle Regole 101, Mattarello (TN)</p>
+  <p>LNiF MRI Lab @ CIMeC, UniTN - Via delle Regole 101, Mattarello (TN); <i>Creation date</i>: ${stamp}</p>
 </div>
 
 <script>
@@ -619,13 +626,15 @@ function sticknav() {
 </html> 
 EOR
 
-# ###############################################################################################
+###############################################################################################	
+# Clean up Section
+###############################################################################################	
+
 # # Clean up QC folder
 # mkdir -p $QCDIR/lnifmri_prep_qcfiles
 # mv $QCDIR/qc_*.txt $QCDIR/lnifmri_prep_qcfiles/
 # mv $QCDIR/qc_*.png $QCDIR/lnifmri_prep_qcfiles/
 
-# ###############################################################################################
 # # Clean up subID folders 
 # for sID in `cat ${QCDIR}/lnifmri_prep_qcfiles/qc_screen_subs_uniq.txt`; do
 # 	mkdir -p ${sID}/func/lnifmri_prep_files

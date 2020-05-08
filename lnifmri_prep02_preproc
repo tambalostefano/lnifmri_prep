@@ -162,7 +162,7 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
         paste -d " " ${epiname}_motoutdvars.txt ${epiname}_motoutscaled.txt > ${epiname}_motoutplot.txt
         $FSLDIR/bin/fsl_tsplot  -i ${epiname}_motoutplot.txt \
                                 -t "${subID}_${sesID} estimated motion outliers (dvars)" \
-                                -a out,dvars -w 660 -h 220 \
+                                -a dvars,out -w 660 -h 220 \
                                 --ymin=0 --ymax=100 \
                                 -o ${epiname}_motout.png;
         # Store number of outliers 
