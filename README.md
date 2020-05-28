@@ -1,6 +1,6 @@
 # lnifmri_prep
 
-This pipeline is developed for use at the Center for Mind/Brain Sciences [CIMeC](https://www.cimec.unitn.it/en/176/magnetic-resonance-laboratory-mri-lab) of the University of Trento.
+This pipeline is developed for use at the [Center for Mind/Brain Sciences - CIMeC](https://www.cimec.unitn.it/en/176/magnetic-resonance-laboratory-mri-lab) of the University of Trento (IT).
 
 *lnifmri_prep* workflow can be summarized as follow:
 
