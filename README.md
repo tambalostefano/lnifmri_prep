@@ -29,11 +29,6 @@ FSL Software suite: [FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL)
 user@host:dcmrawdata$ lnifmri_prep
 ```
 
-## Release History
-
-* 0.0.1
-    * Work in progress
-
 ## Meta
 
 Copyright (C) 2019-2020 Stefano Tambalo, stefano.tambalo@unitn.it>
