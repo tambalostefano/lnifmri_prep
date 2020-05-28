@@ -99,14 +99,7 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
                             --odd -r $TR \
                             --tcustom=${epiname}_slicetiming.txt;
 
-    #####################################################################################################
-    # Compute tSNR
     printf "\tComputing tSNR map\n"
-    # $FSLDIR/bin/bet ${epiimg} ${epiname}_tSNR -m -n
-    # $FSLDIR/bin/fslmaths $epiimg -mul ${epiname}_tSNR_mask -Tmean ${epiname}_tSNR_mean
-    # $FSLDIR/bin/fslmaths $epiimg -mul ${epiname}_tSNR_mask -Tstd ${epiname}_tSNR_std
-    # $FSLDIR/bin/fslmaths ${epiname}_tSNR_mean -div ${epiname}_tSNR_std -nan ${epiname}_tSNR
-    
     $FSLDIR/bin/fslmaths $epiimg -Tmean ${epiname}_tSNR_mean
     
     $FSLDIR/bin/bet ${epiname}_tSNR_mean ${epiname}_tSNR -m -n
@@ -119,8 +112,6 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
                             -div ${epiname}_tSNR_std \
                             -mul ${epiname}_tSNR_mask \
                             -nan ${epiname}_tSNR;
-
-    #####################################################################################################
 
     printf "\tMotion Correction\n"
     $FSLDIR/bin/mcflirt -in $epiimg \

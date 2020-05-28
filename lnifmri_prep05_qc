@@ -76,7 +76,7 @@ done
 $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_qc_motion.png
 
 ###############################################################################################
-# Create final box-plot with RMS displacement for each scan
+# Create final boxplot with RMS displacement for each scan
 paste -d " " $(ls -d1 `pwd`/sub*/func/*abs.rms | cat) > ${QCDIR}/qc_report_rmsabs_boxplot.txt
 $FSLDIR/bin/fsl_boxplot	-i ${QCDIR}/qc_report_rmsabs_boxplot.txt \
 						--title="Absolute Displacement (mm)" \
@@ -126,42 +126,17 @@ cat ${QCDIR}/qc_report_motion_dstats_compact.txt | sed 's/\t/,|,/g' | column -s 
 ls -d1 `pwd`/sub*/func/*tSNR.nii.gz 		> ${QCDIR}/qc_report_tSNRbas_list.txt
 ls -d1 `pwd`/sub*/func/sdc_unc/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRunc_list.txt
 
-$FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRbas `cat ${QCDIR}/qc_report_tSNRbas_list.txt`
-$FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRunc `cat ${QCDIR}/qc_report_tSNRunc_list.txt`
-
-$FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRbas -n -M > ${QCDIR}/qc_report_tSNRbas_boxplot.txt
-$FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRunc -n -M > ${QCDIR}/qc_report_tSNRunc_boxplot.txt
+# min value of tSNR (to scale lightbox colorbars)
+# mR=$($FSLDIR/bin/fslstats ${QCDIR}/qc_report_tSNRbas -r | awk '{print $1}')
+# max value of tSNR (to scale lightbox colorbars)
+# MR=$($FSLDIR/bin/fslstats ${QCDIR}/qc_report_tSNRunc -r | awk '{print $2}')
 
 # min value of tSNR (to scale lightbox colorbars)
-mR=$($FSLDIR/bin/fslstats ${QCDIR}/qc_report_tSNRbas -r | awk '{print $1}')
+mR=20
 # max value of tSNR (to scale lightbox colorbars)
-MR=$($FSLDIR/bin/fslstats ${QCDIR}/qc_report_tSNRunc -r | awk '{print $2}')
-
-# ls -d1 `pwd`/sub*/func/sdc_fmp/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRfmp_list.txt
-# # If exist fmp data
-# if [[ -s ${QCDIR}/qc_report_tSNRfmp_list.txt  ]]; then
-# 	$FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRfmp `cat ${QCDIR}/qc_report_tSNRfmp_list.txt`
-# 	$FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRfmp -n -M > ${QCDIR}/qc_report_tSNRfmp_boxplot.txt
-# fi
-
-# ls -d1 `pwd`/sub*/func/sdc_tup/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRtup_list.txt
-# # If exist tup data
-# if [[ -s ${QCDIR}/qc_report_tSNRtup_list.txt  ]]; then
-# 	$FSLDIR/bin/fslmerge -t ${QCDIR}/qc_report_tSNRtup `cat ${QCDIR}/qc_report_tSNRtup_list.txt`
-# 	$FSLDIR/bin/fslstats -t ${QCDIR}/qc_report_tSNRtup -n -M > ${QCDIR}/qc_report_tSNRtup_boxplot.txt
-# fi
+MR=400
 
 printf "raw\nunc" > ${QCDIR}/qc_report_tSNR_boxplotlegend.txt
-
-# Combine all values in a n-column file to plot
-paste -d " " $(ls -d1 ${QCDIR}/qc_report_tSNR*boxplot.txt) > ${QCDIR}/qc_report_tSNR_boxplot.txt
-$FSLDIR/bin/fsl_boxplot	-i ${QCDIR}/qc_report_tSNR_boxplot.txt \
-						--title="temporal SNR" \
-						--ylabel="tSNR (a.u.)" \
-						--xlabel="Scan Type" \
-						--legend=${QCDIR}/qc_report_tSNR_boxplotlegend.txt \
-						--height=220 \
-						-o ${QCDIR}/lnifmri_prep_qc_tSNR_boxplot.png;
 
 # Combine all tSNR maps in a lightbox view
 pnglist=""
@@ -171,6 +146,11 @@ for epiimg in `cat ${QCDIR}/qc_report_tSNRbas_list.txt` ; do
     readarray -d / -t fileparts <<< "${epiimg}"
     sid=$((${#fileparts[@]}-3))
     subID=$(echo ${fileparts[${sid}]})
+
+	# For boxplot chart
+	$FSLDIR/bin/fslstats ${epiimg} -n -M >> ${QCDIR}/qc_report_tSNRbas_boxplot.txt
+
+	# For lightbox image
     str="${QCDIR}/qc_report_tSNRbas_${subID}.png"
 	$FSLDIR/bin/fsleyes render  --scene lightbox -ss 3 -hc -hl \
 								-cb -cbl right -ls 9 -cbi 50 -p 3 \
@@ -187,6 +167,11 @@ for epiimg in `cat ${QCDIR}/qc_report_tSNRunc_list.txt` ; do
     readarray -d / -t fileparts <<< "${epiimg}"
     sid=$((${#fileparts[@]}-4))
     subID=$(echo ${fileparts[${sid}]})
+
+    # For boxplot chart
+	$FSLDIR/bin/fslstats -t ${epiimg} -n -M >> ${QCDIR}/qc_report_tSNRunc_boxplot.txt
+
+	# For lightbox image
     str="${QCDIR}/qc_report_tSNRunc_${subID}.png"
     $FSLDIR/bin/fsleyes render  --scene lightbox -ss 3 -hc -hl \
     							-cb -cbl right -ls 9 -cbi 50 -p 3 \
@@ -198,6 +183,16 @@ done
 $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/qc_report_tSNRunc.png
 
 $FSLDIR/bin/pngappend ${QCDIR}/qc_report_tSNRbas.png + ${QCDIR}/qc_report_tSNRunc.png ${QCDIR}/lnifmri_prep_qc_tSNR_lightbox.png
+
+# Combine all values in a n-column file for boxplot
+paste -d " " $(ls -d1 ${QCDIR}/qc_report_tSNR*boxplot.txt) > ${QCDIR}/qc_report_tSNR_boxplot.txt
+$FSLDIR/bin/fsl_boxplot	-i ${QCDIR}/qc_report_tSNR_boxplot.txt \
+						--title="temporal SNR" \
+						--ylabel="tSNR (a.u.)" \
+						--xlabel="Scan Type" \
+						--legend=${QCDIR}/qc_report_tSNR_boxplotlegend.txt \
+						--height=220 \
+						-o ${QCDIR}/lnifmri_prep_qc_tSNR_boxplot.png;
 
 ###############################################################################################	
 # POWER SPECTRUM Section
@@ -261,6 +256,10 @@ for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
 	fi
 	printf "(Avail. SDC: %s)\n" "${fs}${ts}${us}" >> ${QCDIR}/qc_report_sdc.txt
 done #for subID
+
+###############################################################################################	
+# Filelist Section
+###############################################################################################	
 
 ###############################################################################################
 # Create filelist for group-ICA in MNI space

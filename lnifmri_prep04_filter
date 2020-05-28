@@ -255,6 +255,21 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_sdclist.txt` ; do
 	$FSLDIR/bin/fslmaths ${outname}-MNI -kernel gauss 3 -fmean ${outname}-MNI-smooth
 	#Set GM mask as weighting file?
 
+	# Repeat for non-BPF data
+	#Warping of filtered data to MNI space
+	printf "\tFinal warping of EPI to MNI\n"
+	$FSLDIR/bin/applywarp	-i ${epiimg} \
+							-r ${std} \
+							-w ${mniwarp} \
+							--interp=spline \
+							-o ${outname}-nonBPF-MNI.nii.gz;
+
+	#Create smoothed version of subj- and std-space timeseries
+	printf "\tSpatial smoothing\n"
+	$FSLDIR/bin/fslmaths ${epiimg} -kernel gauss 3 -fmean ${outname}-nonBPF-smooth
+	$FSLDIR/bin/fslmaths ${outname}-nonBPF-MNI -kernel gauss 3 -fmean ${outname}-nonBPF-MNI-smooth
+	
+
 	#Run single-subject ICA [otional]
 	case "${runica}" in
 		y)
