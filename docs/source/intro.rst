@@ -2,6 +2,8 @@ LNiF MRI Preprocessing Workflow
 ================================
 
 *lnifmri_prep* is a set of plain bash scripts to automate preprocessing and QC of MRI data.
+This pipeline is developed for use at the `CIMeC - Center for Mind/Brain Sciences <https://www.cimec.unitn.it/en/176/magnetic-resonance-laboratory-mri-lab>`_ (University of Trento, IT).
+
 
 It requires minimal user interaction and provide easily interpretable output along with quality control reporting. It implements a generic set of preprocessing steps on structural and functional MRI data in NIFTI format, including: tissue class segmentation, bias field correction, brain extraction, motion correction, susceptibility distortion correction (SDC), within-subject coregistration and normalization to standard space template, nuisance regression, bandpass filtering, ICA decomposition and QC reporting. It also provide outputs that can be easily submitted to a variety of group level analyses (e.g. independent component analysis, voxel-based morphometry, surface-based analysis, etc.)
 
