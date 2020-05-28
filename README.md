@@ -1,11 +1,24 @@
 # lnifmri_prep
-> Preprocessing and QA workflow for functional MRI
 
-One to two paragraph statement about your product and what it does.
+*lnifmri_prep* workflow can be summarized as follow:
+
+* DCM to NII conversion;
+* Creation of output directory structure;
+* Anatomical preprocessing (segmentation, bias field correction, brain extraction, normalization to standard space template);
+* Realignment of functional timeseries and estimation of motion parameters;
+* Unwarping of functional data based on fieldmap o reverse-phase encoding data (see Limitations_);
+* Registration of unwarped functional data to subject structural image and standard space template;
+* Nuisance regression (WM, CSF, motion parameters, temporal masking);
+* Bandpass filtering;
+* Single subject ICA (for quality control purposes);
+* QC reporting (coregistration, normalization, motion, power spectrum);
+* Generation of input lists for group level analysis.
+
 
 ## Requirements
 
 [dcm2niix](https://github.com/rordenlab/dcm2niix/releases)
+
 [FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL)
 
 ## Usage example
