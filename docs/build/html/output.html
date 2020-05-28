@@ -1,0 +1,355 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Output &mdash; lnifmri_prep 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+        <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Workflow Setup" href="workflow.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> lnifmri_prep
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">LNiF MRI Preprocessing Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="requirements.html">System Requirements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="setup.html">Package Setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflow.html">Workflow Setup</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Output</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#subject-specific-output">Subject-specific output</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#structural-data">Structural data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#functional-data">Functional data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sdc-data">SDC data</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#global-output">Global output</a></li>
+</ul>
+</li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">lnifmri_prep</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Output</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/output.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="output">
+<h1>Output<a class="headerlink" href="#output" title="Permalink to this headline">¶</a></h1>
+<p>The output of <em>lnifmri_prep</em> is organized in subfolders of <strong>outputfolder</strong>:</p>
+<ul class="simple">
+<li><strong>logs</strong>: log files for main stages of the pipeline.</li>
+<li><strong>qc</strong>: contains quality control reports and input files for group-level analysis;</li>
+<li><strong>sub-XX</strong>: contains subject-related output files;</li>
+</ul>
+<p>The box below illustrates the hierarchy of files produced by <em>lnifmri_prep</em></p>
+<div class="admonition-lnifmri-prep-output-structure admonition">
+<p class="first admonition-title"><em>lnifmri_prep</em> Output Structure</p>
+<div class="last line-block">
+<div class="line">|__ <strong>dcmcontainer</strong>/</div>
+<div class="line-block">
+<div class="line">|__ any_dcm_folder_name/</div>
+<div class="line-block">
+<div class="line">:</div>
+</div>
+</div>
+<div class="line">:</div>
+<div class="line">|</div>
+<div class="line">|__ <strong>outputfolder</strong>/</div>
+<div class="line-block">
+<div class="line">|__ <strong>logs</strong></div>
+<div class="line-block">
+<div class="line">|__ lnifmri_prep00_organize.txt</div>
+<div class="line-block">
+<div class="line">:</div>
+</div>
+<div class="line">|__ lnifmri_prep05_qc.txt</div>
+</div>
+<div class="line">:</div>
+<div class="line">|__ <strong>qc</strong>/</div>
+<div class="line-block">
+<div class="line">|__ lnifmri_prep_qcfiles/</div>
+<div class="line">|__ lnifmri_preproc_func2std_QC/</div>
+<div class="line">|__ lnifmri_preproc_func2struc_QC/</div>
+<div class="line">|__ filelist_[<em>fmp,tup,unc</em>]_[<em>other software</em>].txt</div>
+<div class="line">|__ lnifmri_preproc_motion_QC.png</div>
+<div class="line">|__ lnifmri_preproc_pspec_QC.png</div>
+</div>
+<div class="line">:</div>
+<div class="line">|__ <strong>sub-01</strong>/</div>
+<div class="line-block">
+<div class="line">|__ <em>anat</em>/</div>
+<div class="line">|__ <em>dwi</em>/</div>
+<div class="line">|__ <em>func</em>/</div>
+<div class="line-block">
+<div class="line">|__ lnifmri_prep_files</div>
+<div class="line">|__ [sdc_fmp/]</div>
+<div class="line-block">
+<div class="line">|__ lnifmri_prep_files</div>
+<div class="line">|__ [sub-01_bold_rest-smooth.ica]</div>
+<div class="line">|__ sub-01_bold_[rest,task]-[space]-[smooth].nii.gz</div>
+<div class="line-block">
+<div class="line">:</div>
+</div>
+</div>
+<div class="line">|__ [sdc_tup/]</div>
+<div class="line-block">
+<div class="line">|__ lnifmri_prep_files</div>
+<div class="line">|__ [sub-01_bold_rest-smooth.ica]</div>
+<div class="line">|__ sub-01_bold_[rest,task]-[space]-[smooth].nii.gz</div>
+<div class="line-block">
+<div class="line">:</div>
+</div>
+</div>
+<div class="line">|__ sdc_unc/</div>
+<div class="line-block">
+<div class="line">|__ lnifmri_prep_files</div>
+<div class="line">|__ [sub-01_bold_rest-smooth.ica]</div>
+<div class="line">|__ sub-01_[rest,task]-[space]-[smooth].nii.gz</div>
+<div class="line-block">
+<div class="line">:</div>
+</div>
+</div>
+<div class="line">|__ sub-01_filelist.txt</div>
+</div>
+<div class="line">:</div>
+<div class="line">|__ <em>misc</em>/</div>
+<div class="line">|__ <em>sdc</em>/</div>
+<div class="line">|__ <em>sub-01_ses-YY_T[1,2]w.anat</em>/</div>
+</div>
+<div class="line">:</div>
+<div class="line">|__ <strong>sub-XX</strong>/</div>
+<div class="line">:</div>
+<div class="line">|__ <strong>sub-ZZ</strong>/</div>
+<div class="line"><br /></div>
+</div>
+</div>
+</div>
+<div class="section" id="subject-specific-output">
+<h2>Subject-specific output<a class="headerlink" href="#subject-specific-output" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="structural-data">
+<h3>Structural data<a class="headerlink" href="#structural-data" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><strong>sub-XX/anat</strong>: Full resolution anatomical data are stored here. You will find <strong>untouched</strong> nifti files and json sidecars for higher level analysis (e.g. Freesurfer’s <em>recon-all</em> or voxel-based morphometry).</li>
+<li><strong>sub-XX/sub-XX_ses-YY.anat</strong>: This folder stores resampled, bias-field corrected and brain-extracted version of structural images, tissue class segmentation, binary masks for GM, WM and CSF, linear and nonlinear matrices for forward and backward registration to standard space (MNI152) brain template.</li>
+<li><strong>sub-XX/dwi</strong>: Contains diffusion weighted images (no preprocessing of DWI data is available at this stage)</li>
+</ul>
+</div>
+<div class="section" id="functional-data">
+<h3>Functional data<a class="headerlink" href="#functional-data" title="Permalink to this headline">¶</a></h3>
+<ul>
+<li><p class="first"><strong>sub-XX/func</strong>: Stores functional timeseries for both resting state and task based protocols.</p>
+<blockquote>
+<div><ul>
+<li><p class="first"><strong>sub-XX/func/lnifmri_prep_files</strong>: Contains intermediate processing steps and utility files used at various stages of the workflow.</p>
+</li>
+<li><p class="first"><strong>sub-XX/func/sdc_XXX</strong>: This set of folders contain the main output, one folder per SDC method:</p>
+<blockquote>
+<div><ul class="simple">
+<li><em>fmp</em>: fieldmap;</li>
+<li><em>tup</em>: reversed phase encoding;</li>
+<li><em>unc</em>: no SDC, only nonlinear registration.</li>
+</ul>
+</div></blockquote>
+</li>
+</ul>
+<p>will be present, each of them containing a preprocessed functional timeseries along with its normalized and smoothed version. It contains also a power-spectrum plot and the text file used to generate the plot. An ICA output folder, if not skipped at setup, is stored here as well.</p>
+<blockquote>
+<div><ul class="simple">
+<li><strong>sub-XX/func/sdc_XXX/lnifmri_prep_files</strong>: As for the top-level folder, intermediate processing steps and utility files used at various stages of the SDC-specific workflow are stored here.</li>
+</ul>
+</div></blockquote>
+</div></blockquote>
+</li>
+</ul>
+</div>
+<div class="section" id="sdc-data">
+<h3>SDC data<a class="headerlink" href="#sdc-data" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><strong>sub-XX/sdc</strong>: Fieldmaps and/or reversed phase encoding (AP/PA, blip up/down) data are stored and processed in this folder.</li>
+</ul>
+</div>
+</div>
+<div class="section" id="global-output">
+<h2>Global output<a class="headerlink" href="#global-output" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><strong>qc</strong>: Contains utility files and images for visual quality control of datasets.</li>
+<li><strong>logs</strong>: This folder contains logfiles filled by <em>lnifmri_prep</em>. Runtime errors are displayed in realtime in the terminal window.</li>
+<li><strong>filelist_*.txt</strong>: list of dataset to be used as input for group-ICA (One for SDC method) or VBM group analysis.</li>
+<li><strong>lnifmri_prep_report.html</strong>: HTML report of preprocessed data.</li>
+</ul>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="workflow.html" class="btn btn-neutral float-left" title="Workflow Setup" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Stefano Tambalo
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

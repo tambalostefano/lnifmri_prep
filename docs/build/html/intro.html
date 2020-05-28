@@ -1,0 +1,249 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>LNiF MRI Preprocessing Workflow &mdash; lnifmri_prep 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+        <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="System Requirements" href="requirements.html" />
+    <link rel="prev" title="Welcome to lnifmri_prep documentation" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> lnifmri_prep
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">LNiF MRI Preprocessing Workflow</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#quick-overview">Quick overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#limitations">Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="requirements.html">System Requirements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="setup.html">Package Setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflow.html">Workflow Setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="output.html">Output</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">lnifmri_prep</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>LNiF MRI Preprocessing Workflow</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/intro.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="lnif-mri-preprocessing-workflow">
+<h1>LNiF MRI Preprocessing Workflow<a class="headerlink" href="#lnif-mri-preprocessing-workflow" title="Permalink to this headline">¶</a></h1>
+<p><em>lnifmri_prep</em> is a set of plain bash scripts to automate preprocessing of MRI data.</p>
+<p>It requires minimal user interaction and provide easily interpretable output along with quality control reporting. It implements a generic set of preprocessing steps on structural and functional MRI data in NIFTI format, including: tissue class segmentation, bias field correction, brain extraction, motion correction, susceptibility distortion correction (SDC), within-subject coregistration and normalization to standard space template, nuisance regression, bandpass filtering, ICA decomposition and QC reporting. It also provide outputs that can be easily submitted to a variety of group level analyses (e.g. independent component analysis, voxel-based morphometry, surface-based analysis, etc.)</p>
+<p>The package requires a working installation of <a class="reference external" href="https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL">FSL</a>, so be sure to have it properly installed on your system. Although not strictly required, a working installation of <a class="reference external" href="https://github.com/rordenlab/dcm2niix/releases">DCM2NIIX</a> is highly recommended to handle DICOM to NIFTI conversion, as its output is perfectly integrated in <em>lnifmri_prep</em>.</p>
+<div class="section" id="quick-overview">
+<h2>Quick overview<a class="headerlink" href="#quick-overview" title="Permalink to this headline">¶</a></h2>
+<p><em>lnifmri_prep</em> workflow can be summarized as follow:</p>
+<ul class="simple">
+<li>DCM to NII conversion;</li>
+<li>Creation of output directory structure;</li>
+<li>Anatomical preprocessing (segmentation, bias field correction, brain extraction, normalization to standard space template);</li>
+<li>Realignment of functional timeseries and estimation of motion parameters;</li>
+<li>Unwarping of functional data based on fieldmap o reverse-phase encoding data (see <a class="reference internal" href="#limitations">Limitations</a>);</li>
+<li>Registration of unwarped functional data to subject structural image and standard space template;</li>
+<li>Nuisance regression (WM, CSF, motion parameters, temporal masking);</li>
+<li>Bandpass filtering;</li>
+<li>Single subject ICA (for quality control purposes);</li>
+<li>QC reporting (coregistration, normalization, motion, power spectrum);</li>
+<li>Generation of input lists for group level analysis.</li>
+</ul>
+</div>
+<div class="section" id="limitations">
+<h2>Limitations<a class="headerlink" href="#limitations" title="Permalink to this headline">¶</a></h2>
+<div class="line-block">
+<div class="line"><strong>Filenames</strong></div>
+<div class="line"><em>lnifmri_prep</em>’s interfaces for I/O of raw (e.g. DICOM folder) and processed data follow the naming convention in use at CIMeC LNiF MRI Lab of University of Trento. If your data come from a different source, then minor tweaking of keyword-based filters implemented in the source code is needed. To do so, please refer to the inline comments of individual shell scripts.</div>
+</div>
+<div class="line-block">
+<div class="line"><strong>Multiple structural images</strong></div>
+<div class="line">More than one anatomical scan can be acquired for a subject. In this case, the structural pipeline will correctly process and store all the datasets in the appropriate folder, but only a single T1w image will be used as a reference for subsequent processing of functional data.</div>
+</div>
+<div class="line-block">
+<div class="line"><strong>Susceptibility Distortion Correction</strong></div>
+<div class="line">If no susceptibility data are available (e.g. fieldmap or blip up/down reference scans), unwarping of functional data will be performed only by nonlinear registration to structural T1 and standard space template.</div>
+</div>
+<div class="line-block">
+<div class="line"><strong>User Interaction</strong></div>
+<div class="line"><em>lnifmri_prep</em> is designed to minimize user interaction. Please refer to <a class="reference external" href="workflow.html">Workflow Setup</a> for information on how to prepare the data environment.</div>
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="requirements.html" class="btn btn-neutral float-right" title="System Requirements" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="index.html" class="btn btn-neutral float-left" title="Welcome to lnifmri_prep documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Stefano Tambalo
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

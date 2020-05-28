@@ -1,0 +1,360 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Workflow Setup &mdash; lnifmri_prep 0.0.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+        <script type="text/javascript" src="_static/language_data.js"></script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Output" href="output.html" />
+    <link rel="prev" title="Package Setup" href="setup.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> lnifmri_prep
+          
+
+          
+          </a>
+
+          
+            
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">LNiF MRI Preprocessing Workflow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="requirements.html">System Requirements</a></li>
+<li class="toctree-l1"><a class="reference internal" href="setup.html">Package Setup</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Workflow Setup</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#setup-the-environment">Setup the environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#launch-lnifmri-prep">Launch <em>lnifmri_prep</em></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#check-progress">Check progress</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="output.html">Output</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">lnifmri_prep</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Workflow Setup</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/workflow.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="workflow-setup">
+<h1>Workflow Setup<a class="headerlink" href="#workflow-setup" title="Permalink to this headline">¶</a></h1>
+<p>The next sections illustrate how to accomplish a complete preprocessing stage.</p>
+<div class="section" id="setup-the-environment">
+<h2>Setup the environment<a class="headerlink" href="#setup-the-environment" title="Permalink to this headline">¶</a></h2>
+<p>Prepare a root container for your raw data DICOM folders:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>user@host:home$ mkdir path/to/dcmcontainer
+</pre></div>
+</div>
+<p>Copy/Move your raw data to <em>path/to/dcmcontainer</em>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>user@host:home$ cp -r path/to/my/dcmfolders/ path/to/dcmcontainer/
+</pre></div>
+</div>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<div class="last line-block">
+<div class="line">The automated pipeline works on a keyword-based parsing of filenames.</div>
+<div class="line"><br /></div>
+<div class="line">If your functional dataset contains resting-state and task-based timeseries, and these two dataset share a common basename, <em>lnifmri_prep</em> will process them <strong>as if they are both resting-state acquisition</strong>. This default behaviour can be tweaked by manually renaming the raw DICOM folder to include the “task” keyword in the folder name. This will disable the bandpass filtering of task-based timeseries.</div>
+<div class="line"><br /></div>
+<div class="line">dcmcontainer</div>
+<div class="line-block">
+<div class="line">|__ anat1_dcm_folder_name</div>
+<div class="line">|__ func1_dcm_folder_name</div>
+<div class="line">|__ <strong>func2_dcm_folder_name</strong>          <em>–&gt; this is the task-based scan</em></div>
+<div class="line"><br /></div>
+</div>
+<div class="line">Renamed to:</div>
+<div class="line"><br /></div>
+<div class="line">dcmcontainer</div>
+<div class="line-block">
+<div class="line">|__ anat1_dcm_folder_name</div>
+<div class="line">|__ func1_dcm_folder_name</div>
+<div class="line">|__ <strong>func2_dcm_task_folder_name</strong> <em>–&gt; this is the task-based scan</em></div>
+<div class="line"><br /></div>
+</div>
+<div class="line">Before launching the workflow, please fix all relevant folders.</div>
+</div>
+</div>
+</div>
+<div class="section" id="launch-lnifmri-prep">
+<h2>Launch <em>lnifmri_prep</em><a class="headerlink" href="#launch-lnifmri-prep" title="Permalink to this headline">¶</a></h2>
+<p>To start the workflow, <em>cd</em> to <em>dcmcontainer</em> and run <em>lnifmri_prep</em>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>user@host:home$ cd path/to/dcmcontainer
+user@host:dcmcontainer$ lnifmri_prep
+</pre></div>
+</div>
+<p>A splash screen will appear; you must provide the location to store preprocessed data:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Enter</span> <span class="n">directory</span> <span class="n">output</span> <span class="n">name</span> <span class="p">[</span><span class="n">YYYYMMDD_HHMMSS</span><span class="p">]:</span>
+</pre></div>
+</div>
+<p>Enter a custom name or accept the default option in square brackets by hitting [ENTER]:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Enter</span> <span class="n">directory</span> <span class="n">output</span> <span class="n">name</span> <span class="p">[</span><span class="n">YYYYMMDD_HHMMSS</span><span class="p">]:</span> <span class="n">outputfolder</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">If a directory <em>outputfolder</em> already exists in the selected path, a timestamp (YYYYMMDD_HHMMSS) will be prepended to avoid overwriting of existing data.</p>
+</div>
+<p>At this point, you have the option to skip single-subject ICA:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Run SS-ICA? (y/n) [y]:
+</pre></div>
+</div>
+<p>by overriding the default answer in square brackets. Make your choice and hit [ENTER].</p>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">Running single-subject ICA can dramatically increase processing time. However, since detailed ICA reports are really useful for visual sanity check of the timeseries, this is the default option.</p>
+</div>
+<p>After a few preliminary steps, a screening of global MR acquisition parameters of functional scans is run to spot potential inconsistencies. Here you have the possibility to exclude zero or more subjects from further processing. A sample summary report will appear at terminal prompt as follows:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Key</span> <span class="n">to</span> <span class="n">param</span> <span class="n">headers</span><span class="p">:</span>
+<span class="n">RT</span>    <span class="o">|</span> <span class="n">RepetitionTime</span>
+<span class="n">ET</span>    <span class="o">|</span> <span class="n">EchoTime</span>
+<span class="o">...</span>
+<span class="n">RCAE</span>  <span class="o">|</span> <span class="n">ReceiveCoilActiveElements</span>
+<span class="n">MAF</span>   <span class="o">|</span> <span class="n">MultibandAccelerationFactor</span>
+
+<span class="n">Code</span>  <span class="o">|</span> <span class="n">Sub</span><span class="o">-</span><span class="n">ID</span>  <span class="o">|</span> <span class="n">RT</span> <span class="o">|</span>  <span class="n">ET</span>    <span class="o">|</span> <span class="o">...</span> <span class="o">|</span> <span class="n">RCAE</span>         <span class="o">|</span> <span class="n">MAF</span> <span class="o">|</span>
+
+<span class="p">[</span><span class="mi">01</span><span class="p">]</span>  <span class="o">|</span> <span class="n">sub</span><span class="o">-</span><span class="mi">01</span>  <span class="o">|</span> <span class="mi">1</span>  <span class="o">|</span>  <span class="mf">0.028</span> <span class="o">|</span> <span class="o">...</span> <span class="o">|</span> <span class="s2">&quot;HC1-7&quot;</span>      <span class="o">|</span>  <span class="mi">8</span>  <span class="o">|</span>
+
+<span class="p">[</span><span class="mi">02</span><span class="p">]</span>  <span class="o">|</span> <span class="n">sub</span><span class="o">-</span><span class="mi">02</span>  <span class="o">|</span> <span class="mi">1</span>  <span class="o">|</span>  <span class="mf">0.028</span> <span class="o">|</span> <span class="o">...</span> <span class="o">|</span> <span class="s2">&quot;HC1-7;NC1&quot;</span>  <span class="o">|</span>  <span class="mi">8</span>  <span class="o">|</span>
+<span class="p">[</span><span class="mi">03</span><span class="p">]</span>  <span class="o">|</span> <span class="n">sub</span><span class="o">-</span><span class="mi">03</span>  <span class="o">|</span> <span class="mi">1</span>  <span class="o">|</span>  <span class="mf">0.028</span> <span class="o">|</span> <span class="o">...</span> <span class="o">|</span> <span class="s2">&quot;HC1-7;NC1&quot;</span>  <span class="o">|</span>  <span class="mi">8</span>  <span class="o">|</span>
+<span class="p">[</span><span class="mi">04</span><span class="p">]</span>  <span class="o">|</span> <span class="n">sub</span><span class="o">-</span><span class="mi">04</span>  <span class="o">|</span> <span class="mi">1</span>  <span class="o">|</span>  <span class="mf">0.028</span> <span class="o">|</span> <span class="o">...</span> <span class="o">|</span> <span class="s2">&quot;HC1-7;NC1&quot;</span>  <span class="o">|</span>  <span class="mi">8</span>  <span class="o">|</span>
+<span class="p">[</span><span class="mi">06</span><span class="p">]</span>  <span class="o">|</span> <span class="n">sub</span><span class="o">-</span><span class="mi">06</span>  <span class="o">|</span> <span class="mi">1</span>  <span class="o">|</span>  <span class="mf">0.028</span> <span class="o">|</span> <span class="o">...</span> <span class="o">|</span> <span class="s2">&quot;HC1-7;NC1&quot;</span>  <span class="o">|</span>  <span class="mi">8</span>  <span class="o">|</span>
+
+<span class="p">[</span><span class="mi">05</span><span class="p">]</span>  <span class="o">|</span> <span class="n">sub</span><span class="o">-</span><span class="mi">05</span>  <span class="o">|</span> <span class="mi">1</span> <span class="o">|</span>   <span class="mf">0.028</span> <span class="o">|</span> <span class="o">...</span> <span class="o">|</span> <span class="s2">&quot;HC1-7;NC12&quot;</span> <span class="o">|</span>  <span class="mi">8</span>  <span class="o">|</span>
+</pre></div>
+</div>
+<p>Subjects are sorted and grouped to highlight sub-groups defined by common acquisition parameters. At the prompt you can specify which subjects to exclude or proceed with the entire experimental dataset:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">To</span> <span class="n">exclude</span> <span class="n">one</span> <span class="ow">or</span> <span class="n">more</span> <span class="n">subjects</span> <span class="kn">from</span> <span class="nn">the</span> <span class="n">workflow</span><span class="p">,</span>
+<span class="n">please</span> <span class="n">enter</span> <span class="n">their</span> <span class="n">code</span> <span class="n">separated</span> <span class="n">by</span> <span class="p">[</span><span class="n">space</span><span class="p">]</span> <span class="ow">and</span> <span class="n">hit</span> <span class="p">[</span><span class="n">ENTER</span><span class="p">],</span> <span class="n">e</span><span class="o">.</span><span class="n">g</span><span class="o">.</span><span class="p">:</span>
+
+<span class="n">Skip</span> <span class="n">subject</span><span class="p">(</span><span class="n">s</span><span class="p">):</span> <span class="mi">01</span> <span class="mi">05</span>
+
+<span class="n">Or</span> <span class="n">leave</span> <span class="n">the</span> <span class="n">field</span> <span class="n">blank</span> <span class="ow">and</span> <span class="n">click</span> <span class="p">[</span><span class="n">ENTER</span><span class="p">]</span> <span class="n">to</span> <span class="n">process</span> <span class="n">the</span> <span class="n">entire</span> <span class="nb">list</span><span class="o">.</span>
+</pre></div>
+</div>
+<p>The program will then show a list of subjects that will be excluded from the analysis and ask for confirmation. The list will show “NONE” if either you will choose to keep all the subjects of if the input list is not valid (e.g.: wrong or non-existent code, missing space between codes, etc…):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Skip subject(s): 13 *(or 00, 3, 03-02, 0104, etc...)*
+
+The following subjects will be EXCLUDED from the analysis:
+
+NONE
+
+Continue? (y/n):
+</pre></div>
+</div>
+<p>In case of partially mispelled codes, the list will show only the valid entries:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Skip subject(s): 01 5
+
+The following subjects will be EXCLUDED from the analysis:
+
+sub-01
+
+Continue? (y/n):
+</pre></div>
+</div>
+<p>Here you can accept and continue or repeat the selection. Once you are happy with your choice, confirm with “y” to finalize this step.</p>
+<div class="line-block">
+<div class="line">Setup is now complete. Wait a few seconds for the program to start. Progress time will be reported in the terminal window upon successful completion of every step. No further actions are required until the end of the workflow.</div>
+<div class="line"><br /></div>
+<div class="line">The process will run as follows:</div>
+</div>
+<blockquote>
+<div><ol class="arabic simple">
+<li>DCM to NIFTI conversion (raw DICOM folders will be renamed with a “.sub” suffix);</li>
+<li>Creation of output directory tree;</li>
+<li>Processing of structural images;</li>
+<li>Processing of functional data;</li>
+<li>QC reporting.</li>
+</ol>
+</div></blockquote>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">During DCM to NII conversion, a copy of NIFTI files will be stored in the corresponding DICOM folder. All converted NIFTI are associated to a .json file containing the most relevant metadata extracted from DICOM header.</p>
+</div>
+</div>
+<div class="section" id="check-progress">
+<h2>Check progress<a class="headerlink" href="#check-progress" title="Permalink to this headline">¶</a></h2>
+<p>You can check the status of the pipeline by inspecting files in the <em>outputfolder/logs</em>. In a new terminal window, type:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>user@host:~$ cd path/to/dcmcontainer/outputfolder/logs
+user@host:logs$ nano XX_logfile
+</pre></div>
+</div>
+<p>or:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>user@host:~$ tail -f path/to/dcmcontainer/outputfolder/logs/XX_logfile.txt
+</pre></div>
+</div>
+<p>to enable real-time monitoring of selected log file.</p>
+<p>After completion, processed files will be stored in the appropriate subfolders of <em>outputfolder</em>.</p>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="output.html" class="btn btn-neutral float-right" title="Output" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="setup.html" class="btn btn-neutral float-left" title="Package Setup" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2020, Stefano Tambalo
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
