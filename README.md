@@ -17,9 +17,9 @@
 
 ## Requirements
 
-[dcm2niix](https://github.com/rordenlab/dcm2niix/releases)
+DCM to NIFTI converter: [dcm2niix](https://github.com/rordenlab/dcm2niix/releases)
 
-[FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL)
+FSL Software suite: [FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL)
 
 ## Usage example
 
@@ -34,11 +34,7 @@ user@host:dcmrawdata$ lnifmri_prep
 
 ## Meta
 
-Stefano Tambalo – {name}.{surname}@unitn.it
+Copyright (C) 2019-2020 Stefano Tambalo, stefano.tambalo@unitn.it>
 
 See ``LICENSE`` for more information.
-
-<!-- Markdown link & img dfn's -->
-[dcm2niix]: https://img.shields.io/npm/v/datadog-metrics.svg?style=flat-square
-[fsl]: https://npmjs.org/package/datadog-metrics
 
