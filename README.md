@@ -1,5 +1,7 @@
 # lnifmri_prep
 
+This pipeline is developed for use at the Center for Mind/Brain Sciences [CIMeC](https://www.cimec.unitn.it/en/176/magnetic-resonance-laboratory-mri-lab) of the University of Trento.
+
 *lnifmri_prep* workflow can be summarized as follow:
 
 * DCM to NII conversion;
