@@ -65,7 +65,7 @@ for anatimg in `cat ${LOGDIR}/lnifmri_prep_anatlist.txt`; do
     	then 
     		type="T2";
 			#Account for multiple strucural images: sub-XX_ses_YY
-    		printf -v LABEL -- "${subID}_ses-%02d_${type}w" "$(( ++subcount ))"
+    		printf -v LABEL "${subID}_ses-%02d_${type}w" "$(( ++subcount ))"
 			printf "\n\tProcessing ${type}w: ${subID} - ${nameID}\n\tStored in: ${LABEL}\n\n"
     		#Call fsl_anat script (see online FSL reference for detailed description of output)
     		#WARNING! linear and nonlinear registration to MNI is NOT available for T2 images!!
@@ -80,7 +80,7 @@ for anatimg in `cat ${LOGDIR}/lnifmri_prep_anatlist.txt`; do
     	else
     		type="T1";
 			#Account for multiple strucural images: sub-XX_ses_YY
-    		printf -v LABEL -- "${subID}_ses-%02d_${type}w" "$(( ++subcount ))"
+    		printf -v LABEL "${subID}_ses-%02d_${type}w" "$(( ++subcount ))"
 			printf "\n\tProcessing ${type}w: ${subID} - ${nameID}\n\tStored in: ${LABEL}\n\n"        
     		#Call fsl_anat script (see online FSL reference for detailed description of output)
     		$FSLDIR/bin/fsl_anat    -o ./${subID}/${LABEL} \
