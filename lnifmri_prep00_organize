@@ -170,7 +170,7 @@ rm -rf dcmlist.txt
 ls -d1 ${OUTDIR}/sub-*/${FUNCDIR}/*.nii.gz > ${LOGDIR}/lnifmri_prep_ep2dlist.txt
 # Create filelist for anatomical processing
 ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*mprage*.nii.gz > ${LOGDIR}/lnifmri_prep_anatlist.txt
-ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*mp2rage*.nii.gz > ${LOGDIR}/lnifmri_prep_mp2ragelist.txt
+# ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*mp2rage*.nii.gz > ${LOGDIR}/lnifmri_prep_mp2ragelist.txt
 # Create filelist for diffusion processing
 # ls -d1 ${OUTDIR}/sub-*/${DWIDIR}/*.nii.gz > ${OUTDIR}/lnifmri_prep_dwilist.txt
 # Create filelist for VBM analysis
