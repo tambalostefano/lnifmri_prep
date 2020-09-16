@@ -160,6 +160,7 @@ Start
 SECONDS=0
 printf "Processing structural data\t"
 $LNIFMRIDIR/lnifmri_prep01_anat >> ${LOGDIR}/lnifmri_prep01_structural.txt &
+$LNIFMRIDIR/lnifmri_prep01_mp2rage >> ${LOGDIR}/lnifmri_prep01_mp2rage.txt &
 duration=$SECONDS
 printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
 elapsed=$(echo $elapsed + $duration | bc)
@@ -170,7 +171,7 @@ if [[ -s ${LOGDIR}/lnifmri_prep_inputlist.txt  ]]; then
     SECONDS=0
     printf "Processing functional data\n\tMotion correction\t"
     $LNIFMRIDIR/lnifmri_prep02_preproc >> ${LOGDIR}/lnifmri_prep02_motioncorr.txt &
-    duration=$SECONDS
+    duration=$SECOND 
     printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
     elapsed=$(echo $elapsed + $duration | bc)
     Progress
