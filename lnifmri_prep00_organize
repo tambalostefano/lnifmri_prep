@@ -94,15 +94,15 @@ for DCMDIR in `cat lnifmri_prep_dcmlist.txt` ; do
     printf "${DCMDIR}: DICOM to NIFTI conversion\n"
     #check if current directory is an output dir from lnifmri_prep;
     #if not, run the DCM to NII conversion of image files
-    if [ -f "${DCMDIR}/.lnifmri_prep_output.txt" ]; then
+    if [ -f "${DCMDIR}/lnifmri_prep_output.txt" ]; then
         
         printf "\t${DCMDIR}: not a raw DICOM folder.\n"
 
     else
 
-    	dcm2niix -f %f_%p_%t_%s -b y -ba n -z y ${DCMDIR}
+    	dcm2niix -f %f_%p_%t_%s_%d -b y -ba n -z y ${DCMDIR}
         sleep 1
-		printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${stamp}" >> ${DCMDIR}/.lnifmri_prep_output.txt
+		printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${stamp}" >> ${DCMDIR}/lnifmri_prep_output.txt
         mv ${DCMDIR} ${DCMDIR}.sub
     fi
 done
@@ -128,33 +128,57 @@ for SUBRAW in *.sub ; do
             $OUTDIR/$SUBDIR/$MISCDIR;
 
     #copy dataset into the corresponding directory
-    for f in $SUBPATH/*.{nii.gz,json,bval,bvec} ; do
-        d=`basename $f`
+    for f in $SUBPATH/*.{nii,nii.gz,json,bval,bvec} ; do
+    # for f in $SUBPATH/*.* ; do
+        #extract basename
+        u=`basename $f`
+        # fix invalid characters
+        d=`echo ${u} | sed -e 's/[^A-Za-z0-9._-]/_/g'`
         #printf "$f\n"
         #printf "$d\n\n"
         case "${d}" in
+            *MEmprage*_e[1-9]*)
+                printf "Copy echo data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$MISCDIR/$d
+                ;;
             *bold*)
-                printf "${d}: Copy func dataset\n"
+                printf "Copy func data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$FUNCDIR/$d
+                ;;
+            *fMRI*) #GE specific
+                printf "Copy func data\t${d}\n"
                 cp $f $OUTDIR/$SUBDIR/$FUNCDIR/$d
                 ;;
             *t1*)
-                printf "${d}: Copy anat dataset\n"
+                printf "Copy anat data\t${d}\n"
                 cp $f $OUTDIR/$SUBDIR/$ANATDIR/$d
                 ;;
-            *t2*)
-                printf "${d}: Copy anat dataset\n"
+            tumor_mask*)
+                printf "Copy anat data\t${d}\n"
                 cp $f $OUTDIR/$SUBDIR/$ANATDIR/$d
+                ;;
+            *T1*) #GE specific 2022-06-07
+                printf "Copy anat data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$ANATDIR/$d
+                ;;                
+            *t2*)
+                printf "Copy T2w data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$MISCDIR/$d
+                ;;
+            *T2*)
+                printf "Copy T2w data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$MISCDIR/$d
                 ;;
             *MSHELL*)
-                printf "${d}: Copy dw dataset\n"
+                printf "Copy diff data\t${d}\n"
                 cp $f $OUTDIR/$SUBDIR/$DWIDIR/$d
                 ;;
             *distcorr*)
-                printf "${d}: Copy sdc dataset\n"
+                printf "Copy sdc data\t${d}\n"
                 cp $f $OUTDIR/$SUBDIR/$SDCDIR/$d
                 ;;
             *field_mapping*)
-                printf "${d}: Copy sdc dataset\n"
+                printf "Copy sdc data\t${d}\n"
                 cp $f $OUTDIR/$SUBDIR/$SDCDIR/$d
                 ;;
         esac
@@ -169,7 +193,7 @@ rm -rf dcmlist.txt
 # Create filelist for functional processing
 ls -d1 ${OUTDIR}/sub-*/${FUNCDIR}/*.nii.gz > ${LOGDIR}/lnifmri_prep_ep2dlist.txt
 # Create filelist for anatomical processing
-ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*mprage*.nii.gz > ${LOGDIR}/lnifmri_prep_anatlist.txt
+ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*.nii.gz > ${LOGDIR}/lnifmri_prep_anatlist.txt
 # ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*mp2rage*.nii.gz > ${LOGDIR}/lnifmri_prep_mp2ragelist.txt
 # Create filelist for diffusion processing
 # ls -d1 ${OUTDIR}/sub-*/${DWIDIR}/*.nii.gz > ${OUTDIR}/lnifmri_prep_dwilist.txt

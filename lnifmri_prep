@@ -48,7 +48,6 @@ Stop() {
     printf "\n(c) stefano.tambalo@unitn.it, 2020.\n"
     printf "**************************************************************\n"
     printf "**************************************************************\n\n"
-    exit 1
 }
 
 [ "$FSLDIR" = "" ] && UsageFSL
@@ -112,7 +111,7 @@ find `pwd`/ -mindepth 1 -maxdepth 1 -type d > lnifmri_prep_dcmlist.txt
 mkdir -p $DIRNAME 
 mkdir -p $LOGDIR
 #This empty file marks an output directory
-printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${default}" > ${DIRNAME}/.lnifmri_prep_output.txt
+printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${default}" > ${DIRNAME}/lnifmri_prep_output.txt
 sleep 2
 
 cat << EOL > ${LOGDIR}/lnifmri_prep00_inputlog.txt
@@ -127,7 +126,7 @@ Output Directory: ${DIRNAME}
 
 Run Motion Outliers Deweighting of timeseries? ${ansmot}
 
-Run SS-ICA? ${ansica}
+Run Single Subject-ICA? ${ansica}
 EOL
 
 ##############################################################################
@@ -165,6 +164,11 @@ duration=$SECONDS
 printf -v laptime "%04dm:%02ds" "$(($duration / 60))" "$(($duration % 60))"
 elapsed=$(echo $elapsed + $duration | bc)
 Progress
+
+#################################################################################
+# For debugging - 20220930 stefano.tambalo@unitn.it
+# exit 1
+#################################################################################
 
 if [[ -s ${LOGDIR}/lnifmri_prep_inputlist.txt  ]]; then
 

@@ -44,89 +44,211 @@ exectime=0
 SECONDS=0
 LOGDIR=`pwd`/logs
 stamp=`date +'%T'`
+cursubID="none"
 
 Start
 #Look for T1 or T2w images
 for anatimg in `cat ${LOGDIR}/lnifmri_prep_anatlist.txt`; do
-    subcount=0
-    # struc=`basename $s`
+    filename=`basename ${anatimg}`
+    anatpath=`dirname ${anatimg}`
     anatname=`$FSLDIR/bin/remove_ext $anatimg`
     readarray -d / -t fileparts <<< "${anatimg}"
     nid=$((${#fileparts[@]}-1))
     sid=$((${#fileparts[@]}-3))
     nameID=$(echo ${fileparts[${nid}]})
     subID=$(echo ${fileparts[${sid}]})
+    std=$FSLDIR/data/standard/MNI152_T1_2mm.nii.gz
 
-    #Resample struc to speed up processing time
-    $FSLDIR/bin/fslmaths ${anatimg} -subsamp2 ${anatname}_lores
-    
+    # Check to restart the ses-XX counter
+    if [[ "${cursubID}" != "${subID}" ]]; then
+        subcount=0
+        cursubID=${subID}
+    fi
+    printf -v sesID "ses-%02d" "$(( ++subcount ))"
+
+    $FSLDIR/bin/robustfov -i ${anatimg} -r ${anatname}_robustfov
+
+##########################################################################
+# 20220926 - stefano.tambalo@unitn.it
+#
+# Updated resampling method to MNI 2mm
+#
+# Previously was a fslmaths -subsamp2, but this caused problems with
+# extremely high FOV size (> 256)
+#
+# Resample struc to speed up processing time
+
+MTXa1=`$FSLDIR/bin/fslval ${anatname}_robustfov dim1`
+MTXa2=`$FSLDIR/bin/fslval ${anatname}_robustfov dim2`
+MTXa3=`$FSLDIR/bin/fslval ${anatname}_robustfov dim3`
+MMa1=`$FSLDIR/bin/fslval ${anatname}_robustfov pixdim1`
+MMa2=`$FSLDIR/bin/fslval ${anatname}_robustfov pixdim2`
+MMa3=`$FSLDIR/bin/fslval ${anatname}_robustfov pixdim3`
+
+MTXr1=`$FSLDIR/bin/fslval ${std} dim1`
+MTXr2=`$FSLDIR/bin/fslval ${std} dim2`
+MTXr3=`$FSLDIR/bin/fslval ${std} dim3`
+MMr1=`$FSLDIR/bin/fslval ${std} pixdim1`
+MMr2=`$FSLDIR/bin/fslval ${std} pixdim2`
+MMr3=`$FSLDIR/bin/fslval ${std} pixdim3 `
+
+# FOV of Volume in mm (SUBJECT)
+FOVa1=`echo "val=${MTXa1}*${MMa1};val" | bc` 
+FOVa2=`echo "val=${MTXa2}*${MMa2};val" | bc` 
+FOVa3=`echo "val=${MTXa3}*${MMa3};val" | bc`
+# Center of Volume in mm (SUBJECT)
+COVa1=`echo "val=${FOVa1};val/=2;val" | bc` 
+COVa2=`echo "val=${FOVa2};val/=2;val" | bc` 
+COVa3=`echo "val=${FOVa3};val/=2;val" | bc`
+
+# FOV of Volume in mm (REFERENCE)
+FOVr1=`echo "val=${MTXr1}*${MMr1};val" | bc` 
+FOVr2=`echo "val=${MTXr2}*${MMr2};val" | bc` 
+FOVr3=`echo "val=${MTXr3}*${MMr3};val" | bc` 
+
+# Adjust translation to account for big FOV
+# see: https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FLIRT/FAQ
+deltaCOVt1=`echo "val=${FOVr1}-${FOVa1};val/=2;val" | bc` 
+deltaCOVt2=`echo "val=${FOVr2}-${FOVa2};val/=2;val" | bc` 
+deltaCOVt3=`echo "val=${FOVr3}-${FOVa3};val/=2;val" | bc`
+
+# Write image FOV
+########################################################
+MANUF=$(awk '$1 ~ /"Manufacturer"/ {print $2}' ${anatname}.json | tr -d ',')
+
+cat <<-EOC > ${anatname}_COVa.csv
+Manufacturer,${MANUF}
+Filename,${filename}
+dim1,${MTXa1}
+dim2,${MTXa2}
+dim3,${MTXa3}
+pixdim1(mm),${MMa1}
+pixdim2(mm),${MMa2}
+pixdim3(mm),${MMa3}
+fov1(mm),${FOVa1}
+fov2(mm),${FOVa2}
+fov3(mm),${FOVa3}
+cov1(mm),${COVa1}
+cov2(mm),${COVa2}
+cov3(mm),${COVa3}
+EOC
+########################################################
+
+# Write translation matrix
+########################################################
+cat <<-EOM > ${anatname}_resample.mat
+1 0 0 ${deltaCOVt1}
+0 1 0 ${deltaCOVt2}
+0 0 1 ${deltaCOVt3}
+0 0 0 1
+EOM
+########################################################
+
+printf "\n\tResampling\n\t${anatname}_robustfov to\n\t${std}\n"
+$FSLDIR/bin/flirt   -in ${anatname}_robustfov \
+                    -applyxfm -init ${anatname}_resample.mat \
+                    -out ${anatname}_lores \
+                    -paddingsize 0 \
+                    -interp trilinear \
+                    -ref ${std};
+
+# 20220926 - stefano.tambalo@unitn.it
+##########################################################################
+
+    # Check if a lesion mask exists, in that case include it in the pipeline
+    optional_reg_mask=""
+    optional_maths_mask=""
+    if compgen -G "${anatpath}/*mask*" > /dev/null; then #this is BASH-only. Needs to be fixed with some portable alternative.
+        printf "\n\tOptional mask found in: ${anatpath}\n"
+        mask=`ls -d1 ${anatpath}/tumor_mask*`
+        
+        printf "\n\tResampling\n\t${mask} to\n\t${std}\n"
+        $FSLDIR/bin/flirt   -in ${mask} \
+                            -applyxfm -init ${anatname}_resample.mat \
+                            -out ${anatname}_lesionmask \
+                            -paddingsize 0 \
+                            -interp nearestneighbour \
+                            -ref ${std};
+
+        #Binarize and invert to weight cost function (0=ignore, 1=keep)
+        $FSLDIR/bin/fslmaths ${anatname}_lesionmask -binv ${anatname}_lesionmaskinv
+        $FSLDIR/bin/fslmaths ${anatname}_lesionmask -bin ${anatname}_lesionmask
+        optional_reg_mask="-m ${anatname}_lesionmask"
+        optional_maths_mask="-mul ${anatname}_lesionmask"
+        optional_maths_mask_inv="-mul ${anatname}_lesionmaskinv"
+        printf "\tLesion mask is available: \n\t\t${anatname}_lesionmask\n"
+    else
+        printf "\n\tNo valid mask found in: ${anatpath}\n"
+    fi
+        
     #Check to determine image type (T1/T2)
-    if [[ ${anatname} = *"_t2_"* ]] ;
-    	then 
-    		type="T2";
+    # if [[ ${anatname} = *"_t2_"* ]] ;
+    # 	then 
+    # 		type="T2";
+            #When working on T2 images, only the FULL RES is processed
 			#Account for multiple strucural images: sub-XX_ses_YY
-    		printf -v LABEL "${subID}_ses-%02d_${type}w" "$(( ++subcount ))"
-			printf "\n\tProcessing ${type}w: ${subID} - ${nameID}\n\tStored in: ${LABEL}\n\n"
+   #  		printf -v LABEL "${subID}_ses-%02d_${type}w" "$(( ++counter ))"
+			# printf "\n\tProcessing ${type}w: ${subID} - ${nameID}\n\tStored in: ${LABEL}\n\n"
     		#Call fsl_anat script (see online FSL reference for detailed description of output)
     		#WARNING! linear and nonlinear registration to MNI is NOT available for T2 images!!
-    		$FSLDIR/bin/fsl_anat    -o ./${subID}/${LABEL} \
-            		                --nocrop \
-                    		        --noreorient \
-                            		--nosubcortseg \
-                            		--noreg \
-                            		--nononlinreg \
-                            		-t ${type} \
-                            		-i ${anatname}_lores;
-    	else
+#           $FSLDIR/bin/fsl_anat  -o ./${subID}/${LABEL} \
+#                                 --nocrop \
+#                      		      --noreorient \
+#                              	  --nosubcortseg \
+#                             	  --noreg \
+#                              	  --nononlinreg \
+#                              	  -t ${type} \
+#                              	  -i ${anatname};
+     #        $LNIFMRIDIR/lnifmri_anat  -o ./${subID}/${LABEL} \
+     #                              --nocrop \
+     #                              --noreorient \
+     #                              --nosubcortseg \
+     #                              --noreg \
+     #                              --nononlinreg \
+     #                              -t ${type} \
+     #                              -i ${anatname};
+
+    	# else
     		type="T1";
             #Account for multiple strucural images: sub-XX_ses_YY
-       		printf -v LABEL "${subID}_ses-%02d_${type}w" "$(( ++subcount ))"
+       		# printf -v LABEL "${subID}_ses-%02d_${type}w" "$(( ++counter ))"
+            printf -v LABEL "${subID}_${sesID}_${type}w"
+
    			printf "\n\tProcessing ${type}w: ${subID} - ${nameID}\n\tStored in: ${LABEL}\n\n"        
        		#Call fsl_anat script (see online FSL reference for detailed description of output)
-       		$FSLDIR/bin/fsl_anat    -o ./${subID}/${LABEL} \
-               		                --nocrop \
-                       		        --noreorient \
-                               		--nosubcortseg \
-                              		-t ${type} \
-                               		-i ${anatname}_lores;
-    fi
+#           $FSLDIR/bin/fsl_anat    -o ./${subID}/${LABEL} \
+#                                   --nocrop \
+#                          		    --noreorient \
+#                                   --nosubcortseg \
+#                                   -t ${type} \
+#                                   -i ${anatname}_lores;
+            $LNIFMRIDIR/lnifmri_anat  -o ./${subID}/${LABEL} \
+                                   --nocrop \
+                                   --noreorient \
+                                   --nosubcortseg \
+                                   -t ${type} \
+                                   -i ${anatname}_lores \
+                                    ${optional_reg_mask};
+
+     # fi
 
     #Prepare WM mask
     $FSLDIR/bin/fslmaths    ./${subID}/${LABEL}.anat/${type}_fast_pve_2.nii.gz \
-                            -thr 0.5 \
-                            -bin ./${subID}/${LABEL}.anat/${type}_wmedge.nii.gz;
+                            -thr 0.5 -bin \
+                            ${optional_maths_mask_inv} \
+                            ./${subID}/${LABEL}.anat/${type}_wmedge.nii.gz;
     
     #Prepare CSF msk            
     $FSLDIR/bin/fslmaths    ./${subID}/${LABEL}.anat/${type}_fast_pve_0.nii.gz \
-                            -thr 0.5 \
-                            -bin ./${subID}/${LABEL}.anat/${type}_csfedge.nii.gz;
+                            -thr 0.5 -bin \
+                            ${optional_maths_mask_inv} \
+                            ./${subID}/${LABEL}.anat/${type}_csfedge.nii.gz;
 
     #Prepare GM mask
     $FSLDIR/bin/fslmaths    ./${subID}/${LABEL}.anat/${type}_fast_pve_1.nii.gz \
-                            -thr 0.5 \
-                            -bin ./${subID}/${LABEL}.anat/${type}_gmedge.nii.gz;
-
-    # #################################################################################################
-    # Prepare anatomical reference
-    # ------------------ ALTERNATIVE VERSION -----------
-    # printf "\tRunning BET on T1w\n"
-    # struc=`$FSLDIR/bin/imglob *t1_*mprage*[0-9]_+([0-9]).nii.gz`
-    # strucname=`$FSLDIR/bin/remove_ext ${struc}`
-    # $FSLDIR/bin/flirt \
-    #   -in ${struc} \
-    #   -applyxfm \
-    #   -init /usr/local/fsl/etc/flirtsch/ident.mat \
-    #   -out ${strucname}_resampled.nii.gz \
-    #   -paddingsize 0.0 \
-    #   -interp nearestneighbour \
-    #   -ref $FSLDIR/data/standard/MNI152_T1_2mm;
-    # bstruc="${strucname}_brain"
-    # wmstruc="${strucname}_wmedge"
-    # $FSLDIR/bin/bet ${strucname}_resampled ${bstruc} -f 0.4 -g 0.1 -B
-    # $FSLDIR/bin/fast -B -I 10 -l 10 ${bstruc}
-    # $FSLDIR/bin/fslmaths ${bstruc}_pve_2.nii.gz -thr 0.5 -bin ${wmstruc}
-    # $FSLDIR/bin/flirt -in ${bstruc} -ref $FSLDIR/data/standard/MNI152_T1_2mm_brain.nii.gz -dof 12 -out T1toMNIlin.nii.gz -omat T1toMNIlin.mat
-    # $FSLDIR/bin/fnirt --in=${struc}_resampled --aff=T1toMNIlin.mat --config=T1_2_MNI152_2mm.cnf --iout=T1toMNInonlin.nii.gz --cout=T1toMNI_coef.nii.gz --fout=T1_to_MNI_nonlin_field.nii.gz
+                            -thr 0.5 -bin \
+                            ${optional_maths_mask_inv} \
+                            ./${subID}/${LABEL}.anat/${type}_gmedge.nii.gz;                            
 
 done #for .sub
 

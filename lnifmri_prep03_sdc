@@ -1,8 +1,9 @@
-#!/bin/bash
+	#!/bin/bash
 #
 # LNiF MRI Lab Pipeline for preprocessing of
 # structural and functional MRI dataset
 # stefano.tambalo@unitn.it - 20200310
+# rev. 20210513
 #
 # Correct Susceptibility Induced Distortion:
 # -   Fieldmap (if present)
@@ -43,37 +44,38 @@ NextStep() {
     exit 1
 }
 
-#Formatted configuration file with default params to run TOPUP
-arg="# ##############################################################\n\
-# Configuration file for AP/PA unwarping of ep2d_bold timeseries\n\
-# LNIF MRI LAB @ UniTN - stefano.tambalo@unitn.it\n\
-# ##############################################################\n\
-# Resolution (knot-spacing) of warps in mm\n\
---warpres=6,4,1\n\
-# Subsampling level (a value of 2 indicates that a 2x2x2 neighbourhood is collapsed to 1 voxel)\n\
---subsamp=1,1,1\n\
-# FWHM of gaussian smoothing\n\
---fwhm=4,2,0\n\
-# Maximum number of iterations\n\
---miter=5,10,20\n\
-# Relative weight of regularisation\n\
---lambda=0.000015,0.0000000005,0.00000000001\n\
-# If set to 1 lambda is multiplied by the crrent average squared difference\n\
---ssqlambda=1\n\
-# Regularisation model\n\
---regmod=bending_energy\n\
-# If set to 1 movements are estimated along with the field\n\
---estmov=1,1,0\n\
-# 0=Levenberg-Marquardt, 1=Scaled Conjugate Gradient\n\
---minmet=0,0,1\n\
-# Quadratic or cubic splines\n\
---splineorder=3\n\
-# Precision for calculation and storage of Hessian\n\
---numprec=double\n\
-# Linear or spline interpolation\n\
---interp=spline\n\
-# If set to 1 the images are individually scaled to a common mean intensity\n\
---scale=1\n";
+# 20210513 - This is disabled. See heredoc in the topup SDC section
+# #Formatted configuration file with default params to run TOPUP
+# arg="# ##############################################################\n\
+# # Configuration file for AP/PA unwarping of ep2d_bold timeseries\n\
+# # LNIF MRI LAB @ UniTN - stefano.tambalo@unitn.it\n\
+# # ##############################################################\n\
+# # Resolution (knot-spacing) of warps in mm\n\
+# --warpres=6,4,1\n\
+# # Subsampling level (a value of 2 indicates that a 2x2x2 neighbourhood is collapsed to 1 voxel)\n\
+# --subsamp=1,1,1\n\
+# # FWHM of gaussian smoothing\n\
+# --fwhm=4,2,0\n\
+# # Maximum number of iterations\n\
+# --miter=5,10,20\n\
+# # Relative weight of regularisation\n\
+# --lambda=0.000015,0.0000000005,0.00000000001\n\
+# # If set to 1 lambda is multiplied by the crrent average squared difference\n\
+# --ssqlambda=1\n\
+# # Regularisation model\n\
+# --regmod=bending_energy\n\
+# # If set to 1 movements are estimated along with the field\n\
+# --estmov=1,1,0\n\
+# # 0=Levenberg-Marquardt, 1=Scaled Conjugate Gradient\n\
+# --minmet=0,0,1\n\
+# # Quadratic or cubic splines\n\
+# --splineorder=3\n\
+# # Precision for calculation and storage of Hessian\n\
+# --numprec=double\n\
+# # Linear or spline interpolation\n\
+# --interp=spline\n\
+# # If set to 1 the images are individually scaled to a common mean intensity\n\
+# --scale=1\n";
 
 exectime=0
 SECONDS=0
@@ -84,20 +86,23 @@ Start
 
 #Wait for 01_anat and 02_preproc to finish
 while true; do
-	stamp=`date +%Y%m%d_%H%M%S`
-	printf "\t%s: Waiting greenlight from 01_anat and 02_preproc\n" "${stamp}"
-	sleep 180
-
 	if [[ -f ${LOGDIR}/lnifmri_prep01_greenlight.txt  && -f ${LOGDIR}/lnifmri_prep02_greenlight.txt ]]; then
 		stamp=`date +%Y%m%d_%H%M%S`
 		printf "\t%s: Greenlight from 01_anat and 02_preproc: starting SDC process\n\n" "${stamp}"
 		break
   	fi
+
+	stamp=`date +%Y%m%d_%H%M%S`
+	printf "\t%s: Waiting greenlight from 01_anat and 02_preproc\n" "${stamp}"
+	sleep 180
+
 done
 
 for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
     epiname=$($FSLDIR/bin/remove_ext ${epiimg})
-    
+
+    epifilename=$(basename ${epiname})
+
     readarray -d / -t fileparts <<< "${epiimg}"
     nid=$((${#fileparts[@]}-1))
     sid=$((${#fileparts[@]}-3))
@@ -112,9 +117,66 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 	wmstruc=${subID}/$STR.anat/T1_wmedge.nii.gz
 	csfstruc=${subID}/$STR.anat/T1_csfedge.nii.gz
 	brainmask=${subID}/$STR.anat/T1_biascorr_brain_mask.nii.gz
+	lesionmask=${subID}/$STR.anat/lesionmask.nii.gz
+	lesionmaskinv=${subID}/$STR.anat/lesionmaskinv.nii.gz
 	std=$FSLDIR/data/standard/MNI152_T1_2mm.nii.gz
 	
 	printf "Scan Name: ${subID} - ${nameID}\n"
+
+	#Extract core parameters from JSON
+	manuf=$(awk '$1 ~ /"Manufacturer"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+	case "${manuf}" in
+		"\"Siemens\"")
+			phenctag="PhaseEncodingDirection"
+			echosp=$(awk '$1 ~ /"DerivedVendorReportedEchoSpacing"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+		;;
+		"\"Philips\"")
+			phenctag="PhaseEncodingAxis"
+			# % Calculate Echo Spacing parameter for Philips-derived dataset
+			# %
+			# % based on: % calc_echo_spacing_philips_mod.m
+			# % Formula from http://www.spinozacentre.nl/wiki/index.php/NeuroWiki:Current_developments#B0_correction
+			# %
+			# % stefano.tambalo@unitn.it - 20210604
+			# % *********************************************************************
+			# % variables, please adapt for each dataset (can be found in *.PAR file)
+			# % matrix size in y direction
+			matrixsize_phase_enc_dir=$(awk '$1 ~ /"AcquisitionMatrixPE"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+			# % EPI factor
+			epifactor=$(awk '$1 ~ /"EchoTrainLength"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+			# % water-fat shift per pixel
+			water_fat_shift_pixel=10.604
+			# % magnetic field strength (T)
+			fieldstrength_tesla=$(awk '$1 ~ /"MagneticFieldStrength"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+			# % *********************************************************************
+			# % Do not edit below this line
+			water_fat_diff_ppm=3.35
+			# % gyromagnetic ratio for proton (1H)
+			resonance_freq_mhz_tesla=42.576
+			echo_train_length=$(echo "${epifactor}+1" | bc -l)
+			# % water_fat_shift_hz 3T = 434.215 Hz
+			water_fat_shift_hz=$(echo "scale=4;${fieldstrength_tesla}*${water_fat_diff_ppm}*${resonance_freq_mhz_tesla}" | bc -l)
+			BW_hz_pixel=$(echo "scale=4;${water_fat_shift_hz}/${water_fat_shift_pixel}" | bc -l)
+			totBW=$(echo "scale=4;${BW_hz_pixel}*${echo_train_length}" | bc -l)
+			echo_spacing_sec=$(echo "scale=4;1/${totBW}" | bc -l)
+			echo_spacing_msec=$(echo "scale=4;${echo_spacing_sec}*1000" | bc -l)
+			echosp=${echo_spacing_sec}
+		;;
+	esac
+
+	acqmtxpe=$(awk '$1 ~ /"AcquisitionMatrixPE"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+	totreadtime=`echo "scale=4;${echosp}*(${acqmtxpe}-1)" | bc -l`
+    phenc=$(awk '$1 ~ /"'"${phenctag}"'"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+
+	printf "Manufacturer: %s\n" "${manuf}"
+	printf "Echo Spacing: %s\n" "${echosp}"
+
+	if [ "${phenc}" = "\"j-\"" ];
+		then
+			pedir="-y"
+		else
+			pedir="y"
+	fi
 
 	# Run SDC preparation only once per subID
 	if [ ! -e ${subID}/sdc/lnifmri_prep03_greenlight.txt ]; then
@@ -129,7 +191,7 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 			declare ediff
 
 			#Process Magnitude GRE dataset
-			for n in `$FSLDIR/bin/imglob ${subID}/sdc/*gre_field_mapping*_e[12].nii.gz` ; do
+			for n in `ls ${subID}/sdc/*gre_field_mapping*_e[12].nii.gz` ; do
 			    g=`$FSLDIR/bin/remove_ext ${n}`
 
 				# printf "\tReformat JSON file\n"
@@ -142,19 +204,25 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 			    				-f 0.4 \
 			    				-g 0.1 \
 			    				-R;
+			    
 			    #Erode brain-extracted image to exclude noisy voxels
 			    $FSLDIR/bin/fslmaths ${g}_brain -ero ${g}_brain_eroded
+
+    			# Add box kernel?
+				# see: https://doi.org/10.1371/journal.pone.0185647, page 5
+			    # $FSLDIR/bin/fslmaths ${g}_brain -kernel box 5 -ero ${g}_brain_eroded
+				
 				#Parse EchoTime from JSON
 				etime=$(awk '$1 ~ /"EchoTime"/ {print $2}' ${g}_parameters.json | tr -d ',')
 			    ediff+=(${etime})
 			done
 
 			#Set arguments for fsl_prepare_fieldmap
-			phaimg=`$FSLDIR/bin/imglob ${subID}/sdc/*gre_field_mapping*ph.nii.gz`
+			phaimg=`ls ${subID}/sdc/*gre_field_mapping*ph.nii.gz`
 
 			#Consider 1st echo of magnitude image (higher SNR)
-			magbrain=`$FSLDIR/bin/imglob ${subID}/sdc/*gre_field_mapping*e1_brain_eroded.nii.gz`
-			magimg=`$FSLDIR/bin/imglob ${subID}/sdc/*gre_field_mapping*e1.nii.gz`
+			magbrain=`ls ${subID}/sdc/*gre_field_mapping*e1_brain_eroded.nii.gz`
+			magimg=`ls ${subID}/sdc/*gre_field_mapping*e1.nii.gz`
 			fmap="${subID}/sdc/ep2d_fmap_fieldmap"
 
 			#Compute echo time difference
@@ -163,6 +231,11 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 			#Derive Fieldmap
 			printf "\tRunning fieldmap estimation with EchoTime diff: ${echdif}\n\n"
 			$FSLDIR/bin/fsl_prepare_fieldmap SIEMENS $phaimg $magbrain $fmap $echdif
+			
+			# Add gaussian smoothing?
+			# see: https://doi.org/10.1371/journal.pone.0185647, page 5
+			# $FSLDIR/bin/fslmaths ${fmap} -s 5 ${fmap}
+
 		else
 			runfmap=0
 			printf "\n\tFieldmap data incomplete or not available.\n"
@@ -176,11 +249,107 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 			#Default parameters config-file for topup
 			cnf="${subID}/sdc/ep2d_topup_cfgpars.cnf"
 			cnfname=`basename ${cnf} .cnf`
-			#Print config-file
-			printf "$arg" > ${cnf}
-
+			#Print config-file - Updated 20210513
+			cat << EOF > ${cnf}
+# ##############################################################
+# Configuration file for AP/PA unwarping of ep2d_bold timeseries
+# LNIF MRI LAB @ UniTN - stefano.tambalo@unitn.it
+# ##############################################################
+# Resolution (knot-spacing) of warps in mm
+--warpres=6,4,1
+# Subsampling level (a value of 2 indicates that a 2x2x2 neighbourhood is collapsed to 1 voxel)
+--subsamp=1,1,1
+# FWHM of gaussian smoothing
+--fwhm=4,2,0
+# Maximum number of iterations
+--miter=5,10,20
+# Relative weight of regularisation
+--lambda=0.000015,0.0000000005,0.00000000001
+# If set to 1 lambda is multiplied by the current average squared difference
+--ssqlambda=1
+# Regularisation model
+--regmod=bending_energy
+# If set to 1 movements are estimated along with the field
+--estmov=1,1,0
+# 0=Levenberg-Marquardt, 1=Scaled Conjugate Gradient
+--minmet=0,0,1
+# Quadratic or cubic splines
+--splineorder=3
+# Precision for calculation and storage of Hessian
+--numprec=double
+# Linear or spline interpolation
+--interp=spline
+# If set to 1 the images are individually scaled to a common mean intensity
+--scale=1
+EOF
+			#Prepare config file
+			TUPDIR=${subID}/func/sdc_tup
+			mkdir -m 777 ${TUPDIR}
+			#Write config-file for topup
+			printf -v par "%s/%s_blipudpars.par" "${TUPDIR}" "${nameIDnoext}"
+			>${TUPDIR}/${nameIDnoext}_blipudpars.par
+			#>${par}
+						
 			printf "\tMerging opposite phase encoding SE-EPI\n\n"
-			$FSLDIR/bin/fslmerge -t ${subID}/sdc/ep2d_topup_fieldmap `ls -d1 ${subID}/sdc/*ep2d_se_distcorr*.nii.gz`
+			ls -d1 ${subID}/sdc/*ep2d_se_distcorr_AP*.nii.gz >> ${subID}/sdc/lnifmri_prep03_phenctomerge.txt
+			ls -d1 ${subID}/sdc/*ep2d_se_distcorr_PA*.nii.gz >> ${subID}/sdc/lnifmri_prep03_phenctomerge.txt
+
+			phencdir=0
+			for p in `cat ${subID}/sdc/lnifmri_prep03_phenctomerge.txt` ; do
+				#Collapse volumes in case of 4D acquisition
+				printf -v phencimg "ep2d_phenc_${phencdir}.nii.gz" "$(( ++phencdir ))"
+				$FSLDIR/bin/fslmaths ${p} -Tmean ${subID}/sdc/${phencimg}
+
+				#Parsing of AP/PA JSON files to properly compose config file for TOPUP
+				parsphenc=${p%.nii.gz}
+				#Alternate phase encoding
+			    altphenc=$(awk '$1 ~ /"'"${phenctag}"'"/ {print $2}' ${parsphenc}.json | tr -d ',')
+				case "${manuf}" in
+					"\"Siemens\"")
+				    case "${altphenc}" in
+						"\"j-\"")
+							# AP - append to config file
+							printf "%s %s\n" "0 -1 0" "${totreadtime}" >> ${par}
+							;;
+						"\"j\"")
+							# PA - append to config file
+							printf "%s %s\n" "0 1 0" "${totreadtime}" >> ${par}
+							;;
+						"\"i-\"")
+							# LR - append to config file
+							printf "%s %s\n" "-1 0 0" "${totreadtime}" >> ${par}
+							;;
+						"\"i\"")
+							# RL - append to config file
+							printf "%s %s\n" "1 0 0" "${totreadtime}" >> ${par}
+							;;
+					esac
+					;;
+					"\"Philips\"")
+					# Here we don't have info on the PE dir, we assume that alphabetical order of
+					# SDC scans is correct.
+					# stefano.tambalo@unitn.it - 20210604
+					#
+					# See: https://github.com/nipreps/sdcflows/issues/5#issuecomment-586417652
+					# Note that until Philips specifies the phase encoding polarity,
+					# dcm2niix will only be able to populate PhaseEncodingAxis (e.g. i or j)
+					# rather than PhaseEncodingDirection (disambiguating j from j-).
+				    case "${altphenc}" in
+						"\"j\"")
+							# AP + PA - overwrite config file
+							printf "%s %s\n%s %s" "0 -1 0" "${totreadtime}" "0 1 0" "${totreadtime}" > ${par}
+							;;
+						"\"i\"")
+							# LR + RL - overwrite config file
+							printf "%s %s\n%s %s" "-1 0 0" "${totreadtime}" "1 0 0" "${totreadtime}" > ${par}
+							;;
+					esac
+					;;
+				esac					
+			done
+
+			$FSLDIR/bin/fslmerge -t ${subID}/sdc/ep2d_topup_fieldmap `ls -d1 ${subID}/sdc/*ep2d_phenc*.nii.gz`
+		
 		else
 			runtopup=0
 			printf "\n\tAP/PA SE data incomplete or not available.\n\n"
@@ -195,19 +364,9 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 	# UNWARPING OF EPI
 	#Load bold EPI scan
 	epivol="${epiname}_onevol"
-	$FSLDIR/bin/fslroi ${epiimg} ${epivol} 30 1
+	$FSLDIR/bin/fslroi ${epiimg} ${epivol} 3 1
 	
 	# printf "\tScan Name: ${subID} - ${nameID}\n"
-
-	#Extract core parameters from JSON
-	echosp=$(awk '$1 ~ /"DerivedVendorReportedEchoSpacing"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
-    phenc=$(awk '$1 ~ /"PhaseEncodingDirection"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
-	
-	# echo ${phenc}
-
-	[ $phenc == "\"j-\"" ] \
-		&& pedir="-y" \
-		|| pedir="y";
 		
 	##########################################################################################
 	#
@@ -224,7 +383,7 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 
 		#Call epi_reg w/fieldmap est. (Single step)
 		printf "\tRunning epi_reg\n\n"
-		$FSLDIR/bin/epi_reg	--echospacing=${echosp} \
+		$LNIFMRIDIR/lnifmri_epi_reg	--echospacing=${echosp} \
 							--wmseg=${wmstruc} \
 							--fmap=${fmap} \
 							--fmapmag=${magimg} \
@@ -233,7 +392,9 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 							--epi=${epivol} \
 							--t1=${t1struc} \
 							--t1brain=${bstruc} \
-							--out=$FMAPDIR/${nameIDnoext};
+							--out=$FMAPDIR/${nameIDnoext} \
+							-v --noclean \
+							--weight=${lesionmaskinv};
 
 		printf "\n\tWarping EPI to T1\n"
 		$FSLDIR/bin/applywarp	-i ${epiimg} \
@@ -241,8 +402,10 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 								-w $FMAPDIR/${nameIDnoext}_warp.nii.gz \
 								--interp=spline \
 								-o $FMAPDIR/${nameIDnoext};
-		$FSLDIR/bin/fslroi $FMAPDIR/${nameIDnoext} ${epiname}_fmap_checkwarpedtostruc 30 1
-		printf "${epiname}_fmap_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
+		$FSLDIR/bin/fslroi $FMAPDIR/${nameIDnoext} ${subID}/func/${epifilename}_fmap_checkwarpedtostruc 3 1
+		#$FSLDIR/bin/fslroi $FMAPDIR/${nameIDnoext} ${epiname}_fmap_checkwarpedtostruc 3 1
+		#printf "${epiname}_fmap_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
+		printf "${subID}/func/${epifilename}_fmap_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
 
 		##########################################################################################
 		#
@@ -278,18 +441,8 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 		printf "\n\tSkipping Topup unwarping\n";
 	else
 		[ ! -d ${subID}/func/sdc_tup ] && { mkdir -m 777 ${subID}/func/sdc_tup; }
-		TUPDIR=${subID}/func/sdc_tup
+		# TUPDIR=${subID}/func/sdc_tup
 		printf "\n\tSaving TOPUP unwarped data to: $TUPDIR\n"
-		#Extract core parameters from JSON
-		acqmtxpe=$(awk '$1 ~ /"AcquisitionMatrixPE"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
-		totreadtime=`echo "scale=4;${echosp}*(${acqmtxpe}-1)" | bc -l`
-
-		#Write config-file for topup
-		par="$TUPDIR/${nameIDnoext}_blipudpars.par"
-
-		[ $phenc == "\"j-\"" ] \
-			&& printf "0 -1 0 ${totreadtime}\n0 1 0 ${totreadtime}\n" >> ${par} \
-			|| printf "0 1 0 ${totreadtime}\n0 -1 0 ${totreadtime}\n" >> ${par};
 
 		printf "\tRunning topup\n"
 		$FSLDIR/bin/topup	--imain=${subID}/sdc/ep2d_topup_fieldmap.nii.gz \
@@ -310,7 +463,7 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 	    $FSLDIR/bin/fslmaths $TUPDIR/${nameIDnoext}_unw_onevol_brain -ero $TUPDIR/${nameIDnoext}_unw_onevol_brain_eroded
 
 		printf "\tRunning epi_reg with topup fieldmap\n\n"
-		$FSLDIR/bin/epi_reg	--epi=${epivol} \
+		$LNIFMRIDIR/lnifmri_epi_reg	--epi=${epivol} \
 							--t1=${t1struc} \
 							--t1brain=${bstruc} \
 							--wmseg=${wmstruc} \
@@ -319,7 +472,9 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 							--fmapmagbrain=$TUPDIR/${nameIDnoext}_unw_onevol_brain_eroded \
 							--echospacing=${echosp} \
 							--pedir=${pedir} \
-							--out=$TUPDIR/${nameIDnoext};
+							--out=$TUPDIR/${nameIDnoext} \
+							-v --noclean \
+							--weight=${lesionmaskinv};
 
 		printf "\n\tWarping EPI to T1\n"
 		$FSLDIR/bin/applywarp	-i ${epiimg} \
@@ -327,14 +482,17 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 								-w $TUPDIR/${nameIDnoext}_warp.nii.gz \
 								--interp=spline \
 								-o $TUPDIR/${nameIDnoext};
-		$FSLDIR/bin/fslroi $TUPDIR/${nameIDnoext} ${epiname}_tup_checkwarpedtostruc 30 1
-		printf "${epiname}_tup_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
-
+		$FSLDIR/bin/fslroi $TUPDIR/${nameIDnoext} ${subID}/func/${epifilename}_tup_checkwarpedtostruc 3 1
+		#$FSLDIR/bin/fslroi $TUPDIR/${nameIDnoext} ${epiname}_tup_checkwarpedtostruc 3 1
+		#printf "${epiname}_tup_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
+		printf "${subID}/func/${epifilename}_tup_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
+		
 		##########################################################################################
 		#
 		#	EPI to MNI
 		#
-		##########################################################################################	
+		##########################################################################################
+
 		printf "\tCreating EPI to MNI composite warps\n"
 		$FSLDIR/bin/convertwarp	-r ${std} \
 								--warp1=$TUPDIR/${nameIDnoext}_warp \
@@ -363,11 +521,12 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 	UNCDIR=${subID}/func/sdc_unc
 	printf "\n\tSaving SD UNCORRECTED data to: $UNCDIR\n\n"
 
-	$FSLDIR/bin/epi_reg	--epi=${epivol} \
+	$LNIFMRIDIR/lnifmri_epi_reg	--epi=${epivol} \
 						--t1=${t1struc} \
 						--t1brain=${bstruc} \
 						--wmseg=${wmstruc} \
-						--out=$UNCDIR/${nameIDnoext};
+						--out=$UNCDIR/${nameIDnoext} \
+						-v --noclean;
 
 	printf "\n\tRegistration of EPI to T1\n"
 	$FSLDIR/bin/flirt	-in ${epiimg} \
@@ -375,15 +534,20 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 						-applyxfm \
 						-init $UNCDIR/${nameIDnoext}.mat \
 						-interp spline \
-						-out $UNCDIR/${nameIDnoext};
-	$FSLDIR/bin/fslroi $UNCDIR/${nameIDnoext} ${epiname}_unc_checkwarpedtostruc 30 1
-	printf "${epiname}_unc_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
+						-out $UNCDIR/${nameIDnoext} \
+						-refweight ${lesionmaskinv};
+						
+	$FSLDIR/bin/fslroi $UNCDIR/${nameIDnoext} ${subID}/func/${epifilename}_unc_checkwarpedtostruc 3 1
+	#$FSLDIR/bin/fslroi $UNCDIR/${nameIDnoext} ${epiname}_unc_checkwarpedtostruc 3 1
+	#printf "${epiname}_unc_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
+	printf "${subID}/func/${epifilename}_unc_checkwarpedtostruc.nii.gz ${t1struc}\n" >> $QCDIR/qc_filelist_check2struct.txt
 
 	##########################################################################################
 	#
 	#	EPI to MNI
 	#
-	##########################################################################################	
+	##########################################################################################
+
 	printf "\tCreating EPI to MNI composite warps\n"
 	$FSLDIR/bin/convertwarp	-r ${std} \
 							--premat=$UNCDIR/${nameIDnoext}.mat \
@@ -400,6 +564,8 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 
 	printf "\tnonlinreg SDC DONE.\n\n"
 
+	ls -d1 `pwd`/sub-*/func/sdc*/${nameID} >> ${LOGDIR}/lnifmri_prep_sdclist.txt
+
 done #for epiimg
 
 #Prepare HTML report for struc and std registration of unwarped images
@@ -407,12 +573,12 @@ printf "\tCreating SDC report\n\n"
 $FSLDIR/bin/slicesdir -o `cat $QCDIR/qc_filelist_check2struct.txt`
 mv slicesdir $QCDIR/lnifmri_prep_func2struc_QC
 printf "\n\n"
-ls -d1 `pwd`/sub-*/func/*checkwarpedtostd.nii.gz >> $QCDIR/qc_filelist_check2std.txt
+ls -d1 sub-*/func/*checkwarpedtostd.nii.gz >> $QCDIR/qc_filelist_check2std.txt
 $FSLDIR/bin/slicesdir -p ${std} `cat $QCDIR/qc_filelist_check2std.txt`
 mv slicesdir $QCDIR/lnifmri_prep_func2std_QC
 printf "\n"
 
-ls -d1 `pwd`/sub-*/func/sdc*/*ep2d_bold*[0-9]_+([0-9]).nii.gz > ${LOGDIR}/lnifmri_prep_sdclist.txt
+#ls -d1 ./sub-*/func/sdc*/*ep2d_bold*[0-9]_+([0-9]).nii.gz > ${LOGDIR}/lnifmri_prep_sdclist.txt
 
 duration=$SECONDS
 printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."

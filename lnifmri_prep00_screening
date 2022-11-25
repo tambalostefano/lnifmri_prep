@@ -58,12 +58,16 @@ pnglist=""
 Start
 
 # Define list of key parameters to be compared
-declare fields=("RepetitionTime" \
+declare fields=("Manufacturer" \
+                "MagneticFieldStrength" \
+                "RepetitionTime" \
                 "EchoTime" \
                 "PixelBandwidth" \
                 "DerivedVendorReportedEchoSpacing" \
                 "ReceiveCoilActiveElements" \
-                "MultibandAccelerationFactor");
+                "MultibandAccelerationFactor"\
+                "PhaseEncodingAxis"\
+                "PhaseEncodingDirection");
 declare pars
 declare numpars
 

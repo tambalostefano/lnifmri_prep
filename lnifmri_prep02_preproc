@@ -3,6 +3,7 @@
 # LNiF MRI Lab Pipeline for preprocessing of
 # structural and functional MRI dataset
 # stefano.tambalo@unitn.it - 20200310
+# rev. 20210513
 #
 # Preprocess functional EPI timeseries:
 # -   Drop 10 volumes
@@ -75,12 +76,9 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
     cat ${epiname}.json | tr -d '\n' > ${epiname}_temp1.json
     sed 's/,\t"/,\n"/g' ${epiname}_temp1.json > ${epiname}_temp2.json
     cat ${epiname}_temp2.json | tr -d '\t' > ${epiname}_parameters.json
-
-    #Store multiband slice timing extracted from JSON
-    awk '$1 ~ /"SliceTiming"/ {print $2}' ${epiname}_parameters.json >> ${epiname}_temp_slicetiming.json
-    cat ${epiname}_temp_slicetiming.json | tr ',[]' '\n' > ${epiname}_slicetiming.txt
  
     #Extract core parameters from JSON
+    MANUF=$(awk '$1 ~ /"Manufacturer"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
     TR=$(awk '$1 ~ /"RepetitionTime"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
 
     #Next steps are self-explanatory
@@ -90,20 +88,33 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
     printf "\tSetting data type\n"
     $FSLDIR/bin/fslmaths $epiimg $epiimg -odt float 
 
-    printf "\tGrand Mean scaling\n"
-    $FSLDIR/bin/fslmaths $epiimg -ing 1000 $epiimg
+    # printf "\tGrand Mean scaling\n"
+    # $FSLDIR/bin/fslmaths $epiimg -ing 1000 $epiimg
 
-    printf "\tSlice Timing correction\n"
-    $FSLDIR/bin/slicetimer  -i $epiimg \
-                            -o $epiimg \
-                            --odd -r $TR \
-                            --tcustom=${epiname}_slicetiming.txt;
+    #Slice timing correction
+    if [ ${MANUF} == "\"Siemens\"" ]; then
+        #Store multiband slice timing extracted from JSON - Siemens ONLY
+        awk '$1 ~ /"SliceTiming"/ {print $2}' ${epiname}_parameters.json >> ${epiname}_temp_slicetiming.json
+        cat ${epiname}_temp_slicetiming.json | tr ',[]' '\n' > ${epiname}_slicetiming.txt
+
+        printf "\tSlice Timing correction\n"
+        $FSLDIR/bin/slicetimer  -i $epiimg \
+                                -o $epiimg \
+                                --odd -r $TR \
+                                --tcustom=${epiname}_slicetiming.txt;
+    else
+        #20210513 - TODO: Check slice-ordering!
+        printf "\tSlice Timing correction (non-Siemens data)\n"
+        $FSLDIR/bin/slicetimer  -i $epiimg \
+                                -o $epiimg \
+                                --odd -r $TR;
+    fi
 
     printf "\tComputing tSNR map\n"
     $FSLDIR/bin/fslmaths $epiimg -Tmean ${epiname}_tSNR_mean
     
     $FSLDIR/bin/bet ${epiname}_tSNR_mean ${epiname}_tSNR -m -n
-    
+
     $FSLDIR/bin/fslmaths    $epiimg \
                             -mul ${epiname}_tSNR_mask \
                             -Tstd ${epiname}_tSNR_std;
@@ -170,7 +181,7 @@ for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
 
     printf "\tLogging motion data\n\n"
     ######################################
-    # Descr. stat. data
+    # Descriptive statistics data
     # see code from "lnifmri_util_dstats"
     ######################################
     arg="${epiname}.par"

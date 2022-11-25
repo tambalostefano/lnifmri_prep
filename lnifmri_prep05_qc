@@ -3,6 +3,7 @@
 # LNiF MRI Lab Pipeline for preprocessing of
 # structural and functional MRI dataset
 # stefano.tambalo@unitn.it - 20200310
+# rev. 20210513
 #
 # Generation of utility files and report for visual QC
 #
@@ -27,13 +28,13 @@ Start() {
     printf "\n***************************************************\n"
     printf "LNiF MRI Lab Preprocessing Pipeline\n"
     printf "CIMeC - Center for Mind/Brain Science\n\n"
-    printf "Build QC reports (registration, motion correction, power spectrum)\n"        
+    printf "Building QC summary\n"        
 }
 
 NextStep() {
     printf "Complete. Exec. Time: ${exectime}\n\n"
 	printf "To browse a QC summary of your data, open:\n"    
-	printf "file:/%s\n" "`pwd`/lnifmri_prep_report.html"    	
+	printf "file: %s\n" "./lnifmri_prep_report.html"    	
     printf "\n\n***************************************************\n\n"
     exit 1
 }
@@ -41,12 +42,12 @@ NextStep() {
 [ "$FSLDIR" = "" ] && UsageFSL
 exectime=0
 SECONDS=0
-QCDIR=`pwd`/qc
-LOGDIR=`pwd`/logs
+QCDIR=./qc
+LOGDIR=./logs
+
 stamp=`date +%Y%m%d_%H%M%S`
 
 Start
-
 
 ###############################################################################################	
 # MOTION Section
@@ -77,16 +78,32 @@ $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_qc_motion.png
 
 ###############################################################################################
 # Create final boxplot with RMS displacement for each scan
-paste -d " " $(ls -d1 `pwd`/sub*/func/*abs.rms | cat) > ${QCDIR}/qc_report_rmsabs_boxplot.txt
+paste -d " " $(ls -d1 ./sub*/func/*abs.rms | cat) > ${QCDIR}/qc_report_rmsabs_boxplot_full.txt
+# Trim unequal lenght
+maxcol=$(awk '{print NF}' ${QCDIR}/qc_report_rmsabs_boxplot_full.txt | sort -nu | tail -n 1)
+awk -v var=${maxcol} 'NF==var' ${QCDIR}/qc_report_rmsabs_boxplot_full.txt > ${QCDIR}/qc_report_rmsabs_boxplot.txt
+numrow=$(awk '{print NR}' ${QCDIR}/qc_report_rmsabs_boxplot.txt | tail -n 1)
+printf "\n\tRMS Abs. Disp.: trimming RMS data to ${numrow} volumes.\n"
+
+printf "\tMAXCOL\t${maxcol}\n\tNUMROW\t${numrow}\n"
+
 $FSLDIR/bin/fsl_boxplot	-i ${QCDIR}/qc_report_rmsabs_boxplot.txt \
-						--title="Absolute Displacement (mm)" \
+						--title="Abs. Displ. (mm)" \
 						--ylabel="Abs. RMS (mm)" \
 						--xlabel="Scan Code" \
 						-o ${QCDIR}/qc_report_rmsabs_boxplot.png;
 
-paste -d " " $(ls -d1 `pwd`/sub*/func/*rel.rms | cat) > ${QCDIR}/qc_report_rmsrel_boxplot.txt
+paste -d " " $(ls -d1 ./sub*/func/*rel.rms | cat) > ${QCDIR}/qc_report_rmsrel_boxplot_full.txt
+# Trim unequal lenght
+maxcol=$(awk '{print NF}' ${QCDIR}/qc_report_rmsrel_boxplot_full.txt | sort -nu | tail -n 1)
+awk -v var=${maxcol} 'NF==var' ${QCDIR}/qc_report_rmsrel_boxplot_full.txt > ${QCDIR}/qc_report_rmsrel_boxplot.txt
+numrow=$(awk '{print NR}' ${QCDIR}/qc_report_rmsrel_boxplot.txt | tail -n 1)
+printf "\n\tRMS Rel. Disp.: trimming RMS data to ${numrow} volumes.\n"
+
+printf "\tMAXCOL\t${maxcol}\n\tNUMROW\t${numrow}\n"
+
 $FSLDIR/bin/fsl_boxplot	-i ${QCDIR}/qc_report_rmsrel_boxplot.txt \
-						--title="Relative Displacement (mm)" \
+						--title="Rel. Displ. (mm)" \
 						--ylabel="Rel. RMS (mm)" \
 						--xlabel="Scan Code" \
 						-o ${QCDIR}/qc_report_rmsrel_boxplot.png;
@@ -123,18 +140,8 @@ cat ${QCDIR}/qc_report_motion_dstats_compact.txt | sed 's/\t/,|,/g' | column -s 
 ###############################################################################################
 # Compose summary SNR/tSNR report
 
-ls -d1 `pwd`/sub*/func/*tSNR.nii.gz 		> ${QCDIR}/qc_report_tSNRbas_list.txt
-ls -d1 `pwd`/sub*/func/sdc_unc/*tSNR.nii.gz	> ${QCDIR}/qc_report_tSNRunc_list.txt
-
-# min value of tSNR (to scale lightbox colorbars)
-# mR=$($FSLDIR/bin/fslstats ${QCDIR}/qc_report_tSNRbas -r | awk '{print $1}')
-# max value of tSNR (to scale lightbox colorbars)
-# MR=$($FSLDIR/bin/fslstats ${QCDIR}/qc_report_tSNRunc -r | awk '{print $2}')
-
-# min value of tSNR (to scale lightbox colorbars)
-mR=20
-# max value of tSNR (to scale lightbox colorbars)
-MR=400
+ls -d1 ./sub*/func/*tSNR.nii.gz     > ${QCDIR}/qc_report_tSNRbas_list.txt
+ls -d1 ./sub*/func/sdc_unc/*tSNR.nii.gz > ${QCDIR}/qc_report_tSNRunc_list.txt
 
 printf "raw\nunc" > ${QCDIR}/qc_report_tSNR_boxplotlegend.txt
 
@@ -147,16 +154,22 @@ for epiimg in `cat ${QCDIR}/qc_report_tSNRbas_list.txt` ; do
     sid=$((${#fileparts[@]}-3))
     subID=$(echo ${fileparts[${sid}]})
 
-	# For boxplot chart
-	$FSLDIR/bin/fslstats ${epiimg} -n -M >> ${QCDIR}/qc_report_tSNRbas_boxplot.txt
+    # For boxplot chart
+    $FSLDIR/bin/fslstats ${epiimg} -n -M >> ${QCDIR}/qc_report_tSNRbas_boxplot.txt
 
-	# For lightbox image
+		# min value of tSNR (to scale lightbox colorbars)
+		mR=$($FSLDIR/bin/fslstats ${epiimg} -n -r | awk '{print $1}')
+		# max value of tSNR (to scale lightbox colorbars)
+		MR=$($FSLDIR/bin/fslstats ${epiimg} -n -r | awk '{print $2}')
+
+    # For lightbox image
     str="${QCDIR}/qc_report_tSNRbas_${subID}.png"
-	$FSLDIR/bin/fsleyes render  --scene lightbox -ss 3 -hc -hl \
-								-cb -cbl right -ls 9 -cbi 50 -p 3 \
-    	                        --outfile ${str} \
-            	                ${epiimg} -dr ${mR} ${MR} -cm red-yellow;
-   	[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
+    $FSLDIR/bin/fsleyes render  --scene lightbox -ss 3 -hc -hl \
+																-cb -cbl right -ls 9 -cbi 50 \
+    	                        	--outfile ${str} \
+            	                	${epiimg} -dr ${mR} ${MR} -cm greyscale;
+   	
+    [[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
 done
 $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/qc_report_tSNRbas.png
 
@@ -169,16 +182,21 @@ for epiimg in `cat ${QCDIR}/qc_report_tSNRunc_list.txt` ; do
     subID=$(echo ${fileparts[${sid}]})
 
     # For boxplot chart
-	$FSLDIR/bin/fslstats -t ${epiimg} -n -M >> ${QCDIR}/qc_report_tSNRunc_boxplot.txt
+    $FSLDIR/bin/fslstats -t ${epiimg} -n -M >> ${QCDIR}/qc_report_tSNRunc_boxplot.txt
 
-	# For lightbox image
+		# min value of tSNR (to scale lightbox colorbars)
+		mR=$($FSLDIR/bin/fslstats ${epiimg} -n -r | awk '{print $1}')
+		# max value of tSNR (to scale lightbox colorbars)
+		MR=$($FSLDIR/bin/fslstats ${epiimg} -n -r | awk '{print $2}')
+
+    # For lightbox image
     str="${QCDIR}/qc_report_tSNRunc_${subID}.png"
     $FSLDIR/bin/fsleyes render  --scene lightbox -ss 3 -hc -hl \
-    							-cb -cbl right -ls 9 -cbi 50 -p 3 \
+    							-cb -cbl right -ls 9 -cbi 50 \
     							--outfile ${str} \
-    							${epiimg} -dr ${mR} ${MR} -cm red-yellow;
+    							${epiimg} -dr ${mR} ${MR} -cm greyscale;
 
-	[[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
+    [[ -z "$pnglist" ]] && pnglist="${pnglist} ${str}" || pnglist="${pnglist} - ${str}"
 done
 $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/qc_report_tSNRunc.png
 
@@ -221,7 +239,6 @@ for subID in `cat ${QCDIR}/qc_screen_subs_uniq.txt` ; do
 									-y "Power" -x "Frequency (Hz)" \
 									-t "${plotDATA[1]}_${plotDATA[2]} - GMw Power Spectrum - TR(s): ${plotDATA[3]}" \
 									-a raw,bpf -w 660 -h 220 \
-									--ymin=0 --ymax=1.5e+7 \
 									--start=1 --finish=2 \
 									-o ${ps};
 			# printf "${subID}: ${ps}\n"		
@@ -263,25 +280,36 @@ done #for subID
 
 ###############################################################################################
 # Create filelist for group-ICA in MNI space
+# if 	[ -e ./sub*/func/sdc_fmp/*MNI-smooth.nii.gz ]; then
+	ls -d1 ./sub*/func/sdc_fmp/*MNI-smooth.nii.gz > filelist_groupICA_fmp.txt
+# else
+# 	printf "\n\tFieldmap SDC data not available.\n"
+# fi
 
-ls -d1 `pwd`/sub*/func/sdc_fmp/*MNI-smooth.nii.gz > filelist_groupICA_fmp.txt
-ls -d1 `pwd`/sub*/func/sdc_tup/*MNI-smooth.nii.gz > filelist_groupICA_tup.txt
-ls -d1 `pwd`/sub*/func/sdc_unc/*MNI-smooth.nii.gz > filelist_groupICA_unc.txt
+# if 	[ -e ./sub*/func/sdc_tup/*MNI-smooth.nii.gz ]; then
+	ls -d1 ./sub*/func/sdc_tup/*MNI-smooth.nii.gz > filelist_groupICA_tup.txt
+# else
+# 	printf "\n\tAP/PA SDC data not available.\n"	
+# fi
+
+ls -d1 ./sub*/func/sdc_unc/*MNI-smooth.nii.gz > filelist_groupICA_unc.txt
 
 ###############################################################################################
 # Create filelist for motion parameters files in subject space
 
-ls -d1 `pwd`/sub*/func/*.par > ${QCDIR}/filelist_motionparameters.txt
-ls -d1 `pwd`/sub*/func/*motoutplot.txt > ${QCDIR}/filelist_motiondvars.txt
+ls -d1 ./sub*/func/*.par > ${QCDIR}/filelist_motionparameters.txt
+ls -d1 ./sub*/func/*motoutplot.txt > ${QCDIR}/filelist_motiondvars.txt
 
 ###############################################################################################	
 # HTML Section
 ###############################################################################################	
 
+printf "\nCreating HTML report\n\n"	
+
 ###############################################################################################
 # Create some utility files for the HTML report
 
-cp ${QCDIR}/qc_screen_keyheaders.txt 		${QCDIR}/lnifmri_prep_qc_report_keyheaders.txt
+cp ${QCDIR}/qc_screen_keyheaders.txt 		  ${QCDIR}/lnifmri_prep_qc_report_keyheaders.txt
 cp ${QCDIR}/qc_screen_formattedtable.txt 	${QCDIR}/lnifmri_prep_qc_report_formattedtable.txt
 cp ${QCDIR}/qc_screen_purgedscans.txt 		${QCDIR}/lnifmri_prep_qc_report_purgedscans.txt
 
@@ -518,7 +546,7 @@ hr.solid {
 </div>
  <div class="row">
   	<div class="column">
-  		<h2>temporal SNR (RAW vs. SDC-unc.)</h2>
+  		<h2>tSNR (RAW vs. SDC-unc.)</h2>
 		<img src="${QCDIR}/lnifmri_prep_qc_tSNR_boxplot.png" alt="tSNR">
 	</div>
 	<div class="column">
