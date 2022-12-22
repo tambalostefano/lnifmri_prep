@@ -1,0 +1,43 @@
+#!/bin/bash
+#
+# LNiF MRI Lab Pipeline for preprocessing of
+# structural and functional MRI dataset
+# stefano.tambalo@unitn.it - 20221219
+#
+# Preprocess structural data with or without lesion mask
+#
+# Based on: https://neuroimaging-core-docs.readthedocs.io/en/latest/pages/fsl_anat_normalization-lesion.html
+#
+########################################################################
+
+outputdir=$1
+inputimage=$2
+lesionmask=$3
+
+basename=`remove_ext ${inputimage}`
+
+if [ ! -d ${basename}.anat ]; then
+  #run custom fsl_anat with optibet
+  $LNIFMRIDIR/lnifmri_util_anat02 -o ${outputdir} -i ${basename} -m ${lesionmask} --nosubcortseg
+fi
+
+#### Normalize everything ####
+# warp the lesion mask into MNI space, use nearest neighbour interpolation
+$FSLDIR/bin/applywarp -i ${outputdir}.anat/lesionmask \
+                      -w ${outputdir}.anat/T1_to_MNI_nonlin_field \
+                      --interp=nn \
+                      -r  $FSLDIR/data/standard/MNI152_T1_2mm \
+                      -o ${outputdir}.anat/lesionmask_to_MNI_nonlin;
+
+# warp the brain mask into MNI space, use nearest neighbour interpolation
+$FSLDIR/bin/applywarp -i ${outputdir}.anat/T1_biascorr_brain_mask.nii.gz \
+                      -w ${outputdir}.anat/T1_to_MNI_nonlin_field \
+                      --interp=nn \
+                      -r $FSLDIR/data/standard/MNI152_T1_2mm \
+                      -o ${outputdir}.anat/T1_brain_mask_to_MNI_nonlin;
+
+# warp the skull stripped brain into MNI space
+$FSLDIR/bin/applywarp -i ${outputdir}.anat/T1_biascorr_brain.nii.gz \
+                      -w ${outputdir}.anat/T1_to_MNI_nonlin_field \
+                      -r $FSLDIR/data/standard/MNI152_T1_2mm \
+                      -o ${outputdir}.anat/T1_to_MNI_nonlin.nii.gz;

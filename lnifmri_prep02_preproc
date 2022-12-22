@@ -1,0 +1,245 @@
+#!/bin/bash
+#
+# LNiF MRI Lab Pipeline for preprocessing of
+# structural and functional MRI dataset
+# stefano.tambalo@unitn.it - 20200310
+# rev. 20210513
+#
+# Preprocess functional EPI timeseries:
+# -   Drop 10 volumes
+# -   Grand Mean Scaling
+# -   Realignment and estimation of motion parameters
+# -   Detection of motion outliers for temporal masking
+#
+########################################################################
+export LC_ALL=C
+
+shopt -s extglob
+Usage() {
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "\tFSLDIR not set!\n\n"
+    printf "\tRequires:\n\t\tFSL (https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL)\n"
+    printf "\n\n(c) stefano.tambalo@unitn.it, 2020.\n"
+    printf "***************************************************\n\n"
+    exit 1
+}
+
+Start() {
+    stamp=`date +%Y%m%d_%H%M%S`
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "Process functional data (motion correction)\n\n"    
+
+}
+
+NextStep() {
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "Complete. Exec. Time: ${exectime}\nNow run lnifmri_prep03_sdc"
+    printf "\n\n***************************************************\n\n"
+    exit 1
+}
+
+[ "$FSLDIR" = "" ] && Usage
+exectime=0
+SECONDS=0
+LOGDIR=`pwd`/logs
+QCDIR=`pwd`/qc
+cursubID="none"
+
+Start
+
+for epiimg in `cat ${LOGDIR}/lnifmri_prep_inputlist.txt` ; do
+
+    epiname=$($FSLDIR/bin/remove_ext ${epiimg})
+    readarray -d / -t fileparts <<< "${epiimg}"
+    nid=$((${#fileparts[@]}-1))
+    sid=$((${#fileparts[@]}-3))
+    nameID=$(echo ${fileparts[${nid}]})
+    subID=$(echo ${fileparts[${sid}]})
+    
+    # Check to restart the ses-XX counter
+    if [[ "${cursubID}" != "${subID}" ]]; then
+        subcount=0
+        cursubID=${subID}
+    fi
+    
+    printf -v sesID "ses-%02d" "$(( ++subcount ))"
+
+    printf "\tDataset: %s - %s\n" "${subID}" "${nameID}"
+
+    # printf "\tReformat JSON file\n"
+    cat ${epiname}.json | tr -d '\n' > ${epiname}_temp1.json
+    sed 's/,\t"/,\n"/g' ${epiname}_temp1.json > ${epiname}_temp2.json
+    cat ${epiname}_temp2.json | tr -d '\t' > ${epiname}_parameters.json
+ 
+    #Extract core parameters from JSON
+    MANUF=$(awk '$1 ~ /"Manufacturer"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+    TR=$(awk '$1 ~ /"RepetitionTime"/ {print $2}' ${epiname}_parameters.json | tr -d ',')
+
+    #Next steps are self-explanatory
+    # printf "\tDiscarding first 10 vols\n"
+    # $FSLDIR/bin/fslroi $epiimg $epiimg 0 100
+    
+    printf "\tSetting data type\n"
+    $FSLDIR/bin/fslmaths $epiimg $epiimg -odt float 
+
+    # printf "\tGrand Mean scaling\n"
+    # $FSLDIR/bin/fslmaths $epiimg -ing 1000 $epiimg
+
+    #Slice timing correction
+    if [ ${MANUF} == "\"Siemens\"" ]; then
+        #Store multiband slice timing extracted from JSON - Siemens ONLY
+        awk '$1 ~ /"SliceTiming"/ {print $2}' ${epiname}_parameters.json >> ${epiname}_temp_slicetiming.json
+        cat ${epiname}_temp_slicetiming.json | tr ',[]' '\n' > ${epiname}_slicetiming.txt
+
+        printf "\tSlice Timing correction\n"
+        $FSLDIR/bin/slicetimer  -i $epiimg \
+                                -o $epiimg \
+                                --odd -r $TR \
+                                --tcustom=${epiname}_slicetiming.txt;
+    else
+        #20210513 - TODO: Check slice-ordering!
+        printf "\tSlice Timing correction (non-Siemens data)\n"
+        $FSLDIR/bin/slicetimer  -i $epiimg \
+                                -o $epiimg \
+                                --odd -r $TR;
+    fi
+
+    printf "\tComputing tSNR map\n"
+    $FSLDIR/bin/fslmaths $epiimg -Tmean ${epiname}_tSNR_mean
+    
+    $FSLDIR/bin/bet ${epiname}_tSNR_mean ${epiname}_tSNR -m -n
+
+    $FSLDIR/bin/fslmaths    $epiimg \
+                            -mul ${epiname}_tSNR_mask \
+                            -Tstd ${epiname}_tSNR_std;
+
+    $FSLDIR/bin/fslmaths    ${epiname}_tSNR_mean \
+                            -div ${epiname}_tSNR_std \
+                            -mul ${epiname}_tSNR_mask \
+                            -nan ${epiname}_tSNR;
+
+    printf "\tMotion Correction\n"
+    $FSLDIR/bin/mcflirt -in $epiimg \
+                        -out ${epiname} \
+                        -meanvol \
+                        -stats -plots \
+                        -rmsrel -rmsabs \
+                        -spline_final;
+    
+    # Mean absolute RMS displacement
+    mabs=$(cat ${epiname}_abs_mean.rms)
+    # Mean relative RMS displacement
+    mrel=$(cat ${epiname}_rel_mean.rms)
+    # Number of outliers
+    nout=0
+
+    #Plot motion traces
+    $FSLDIR/bin/fsl_tsplot  -i ${epiname}.par \
+                            -t "${subID}_${sesID} estimated rotations (rad)" \
+                            -u 1 --start=1 --finish=3 -a x,y,z -w 660 -h 220 \
+                            --ymin=-0.01 --ymax=0.01 \
+                            -o ${epiname}_rot.png;
+    #Plot motion traces
+    $FSLDIR/bin/fsl_tsplot  -i ${epiname}.par \
+                            -t "${subID}_${sesID} estimated translations (mm)"\
+                            --ymin=-1 --ymax=1 \
+                            -u 1 --start=4 --finish=6 -a x,y,z -w 660 -h 220 \
+                            -o ${epiname}_tra.png;
+
+    printf "\tDetecting motion outliers\n"
+    $FSLDIR/bin/fsl_motion_outliers -i $epiimg \
+                                    -o ${epiname}_motout.txt \
+                                    -s ${epiname}_motoutdvars.txt \
+                                    --dvars --nomoco;
+    #Plot motion outliers data
+    if [ -f ${epiname}_motout.txt ] ; then
+        # Sum and scale motout file to plot an overlay of DVARS and Temporal Mask            
+        awk '{for(i=1; i<=NF; i++) x+=$i; x=x*100; print x; x=0}' ${epiname}_motout.txt > ${epiname}_motoutscaled.txt
+        paste -d " " ${epiname}_motoutdvars.txt ${epiname}_motoutscaled.txt > ${epiname}_motoutplot.txt
+        $FSLDIR/bin/fsl_tsplot  -i ${epiname}_motoutplot.txt \
+                                -t "${subID}_${sesID} estimated motion outliers (dvars)" \
+                                -a dvars,out -w 660 -h 220 \
+                                --ymin=0 --ymax=100 \
+                                -o ${epiname}_motout.png;
+        # Store number of outliers 
+        nout=$(sort ${epiname}_motoutscaled.txt | uniq -c | awk 'NR>1 {print $1}')
+        totv=$(wc -l ${epiname}_motoutscaled.txt | awk 'NR=1 {print $1}')
+        pout=$(echo "scale=3; ${nout} / ${totv}" | bc)
+
+    else
+        # plot only DVARS
+        cp ${epiname}_motoutdvars.txt ${epiname}_motoutplot.txt
+        $FSLDIR/bin/fsl_tsplot  -i ${epiname}_motoutplot.txt \
+                                -t "${subID}_${sesID} estimated motion outliers (dvars)" \
+                                -a dvars -w 660 -h 220 \
+                                --ymin=0 --ymax=100 \
+                                -o ${epiname}_motout.png;    
+    fi
+
+    printf "\tLogging motion data\n\n"
+    ######################################
+    # Descriptive statistics data
+    # see code from "lnifmri_util_dstats"
+    ######################################
+    arg="${epiname}.par"
+    cmp="${epiname}_compactpar.txt"
+    argout="qc_motion_${subID}_${sesID}_dstats_full"
+    cmpout="qc_motion_${subID}_${sesID}_dstats_compact"
+    # Compute average rotation and traslation and save to a "compact" output file
+    awk '{ a=(($1+$2+$3)/3); b=(($4+$5+$6)/3); printf "%.8f\t%.8f\n", a, b}' ${arg} > ${cmp}
+
+    input[0]=${arg}
+    input[1]=${cmp}
+    output[0]=${argout}
+    output[1]=${cmpout}
+
+    for x in "${!input[@]}"; do
+        file=${input[$x]}
+        dstats=${output[$x]}
+        # Get number of columns
+        COL=$(awk '{print NF; exit}' ${file})
+        # Cycle through columns
+        for (( i=1; i<=${COL}; i++ )); do
+            # sort the current column and compute values
+            sort -g -k ${i} ${file} | \
+            awk -v f="${i}" \
+            '{  col=$f;
+                a[c++]=col;
+                sum+=col;
+                sumsq += col^2;
+            }
+            END {
+                avg = sum/c;
+                std = sqrt((sumsq-sum^2/c)/c);
+                if ((c % 2) == 1) {
+                    med = a[int(c/2)];}
+                else {
+                    med = ( a[c/2] + a[c/2-1] ) / 2;}
+                {printf "%s\t%.8f\t%.8f\t%.8f\t%.8f\t%.8f\t%.8f\n", c, sum, avg, med, std, a[0], a[c-1]};
+            }' >> ${QCDIR}/${dstats}.txt
+
+            printf "%s\t%s\n" "${subID}" "${sesID}" >> ${QCDIR}/${dstats}_subseskey.txt
+        done
+    done #input
+
+    ######################################
+    # FD RMS data
+    ######################################
+    printf "%s\t%s\t%.4f\t%.4f\t%06s\t%.2f\n" "${subID}" "${sesID}" "${mabs}" "${mrel}" "${nout}" "${pout}">> ${QCDIR}/qc_motion_rms_table.txt
+    printf "\tComplete.\n\n"
+
+done #subject in inputlist
+
+duration=$SECONDS
+printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."
+stamp=`date +%Y%m%d_%H%M%S`
+printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${stamp}" > ${LOGDIR}/lnifmri_prep02_greenlight.txt
+sleep 2
+
+NextStep

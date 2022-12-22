@@ -1,0 +1,209 @@
+#!/bin/bash
+#
+# LNiF MRI Lab Pipeline for preprocessing of
+# structural and functional MRI dataset
+# stefano.tambalo@unitn.it - 20200310
+#
+# Organize raw data in a convenient directory structure.
+# We recommend dcm2niix for DICOM to NIFTI conversion with
+# the following flags:
+#               
+# dcm2niix -f %f_%p_%i_%t_%s -b y -ba n -z y <FOLDER NAME>
+#
+########################################################################
+export LC_ALL=C
+
+shopt -s extglob
+ 
+Usage() {
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "\tRequires:\n\t\t--\n"
+    printf "\tUsage:\n\t\tlnifmri_prep00_organize -o outdir\n"
+    printf "\tArgs:\n"
+    printf "\t\t-o:\tspecify name of main output directory;\n\n"
+    printf "\te.g.:\tlnif_preproc_00_organize -o my_project_root"
+    printf "\n\n(c) stefano.tambalo@unitn.it, 2020.\n"
+    printf "***************************************************\n\n"
+    exit 1
+}
+
+Start() {
+    stamp=`date +%Y%m%d_%H%M%S`
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "Create directory structure\n"    
+    printf "\n\tOutput Directory: $OUTDIR\n\n"
+}
+
+NextStep() {
+    printf "\n****************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "Complete. Exec. Time: ${exectime}\nNow cd to $OUTDIR\nand run lnifmri_prep01_anat\n"
+    printf "\n++++++++++++++++    [ HINT ]    ++++++++++++++++++++\n"
+    printf "To save time, run:\n\tcd <my_project_root>\n\tlnifmri_prep01_anat &\n\tlnifmri_prep02_preproc"
+    printf "\n\n****************************************************\n\n"
+    exit 1
+}
+
+[ "$1" = "" ] && Usage
+
+# Set default directories
+SUBDIR=""
+SUBPATH=""
+DIRNAME=""
+OUTDIR=""
+ANATDIR="anat"
+FUNCDIR="func"
+BOLDDIR="bold"
+RESTDIR="rest"
+DWIDIR="dwi"
+SDCDIR="sdc"
+TOFDIR="tof"
+ASLDIR="asl"
+SWIDIR="swi"
+MISCDIR="misc"
+QCDIR="qc"
+subcount=0
+
+DATAPATH=`pwd`
+#echo $DATAPATH
+
+#Get name of output directory
+while getopts o: option
+    do
+        case "${option}" in
+            o) DIRNAME=${OPTARG};;
+        esac
+    done
+
+#Set fullpath of DIRNAME
+OUTDIR=$DATAPATH/$DIRNAME
+LOGDIR=$DATAPATH/$DIRNAME/logs
+exectime=0
+SECONDS=0
+stamp=`date +%Y%m%d_%H%M%S`
+
+Start
+
+#DICOM conversion
+for DCMDIR in `cat lnifmri_prep_dcmlist.txt` ; do    
+    printf "${DCMDIR}: DICOM to NIFTI conversion\n"
+    #check if current directory is an output dir from lnifmri_prep;
+    #if not, run the DCM to NII conversion of image files
+    if [ -f "${DCMDIR}/lnifmri_prep_output.txt" ]; then
+        
+        printf "\t${DCMDIR}: not a raw DICOM folder.\n"
+
+    else
+
+    	dcm2niix -f %f_%p_%t_%s_%d -b y -ba n -z y ${DCMDIR}
+        sleep 1
+		printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${stamp}" >> ${DCMDIR}/lnifmri_prep_output.txt
+        mv ${DCMDIR} ${DCMDIR}.sub
+        printf "%s\n" "${DCMDIR}.sub" >> lnifmri_prep_sublist.txt
+    fi
+done
+printf "\n\nConversion complete. Setting up the environment \n\n\n"
+
+#Prepare the output directory tree
+#for SUBRAW in *.sub ; do
+#for SUBRAW in `cat lnifmri_prep_sublist.txt` ; do
+for SUBPATH in `cat lnifmri_prep_sublist.txt` ; do    
+    #SUBPATH=$DATAPATH/$SUBRAW
+    #echo $SUBPATH
+    printf -v SUBDIR -- 'sub-%02d' "$(( ++subcount ))"
+    #echo $SUBDIR
+
+    mkdir   -p -m 777 \
+            $OUTDIR/$SUBDIR \
+            $OUTDIR/$SUBDIR/$ANATDIR \
+            $OUTDIR/$SUBDIR/$FUNCDIR \
+            $OUTDIR/$SUBDIR/$DWIDIR \
+            $OUTDIR/$SUBDIR/$SDCDIR \
+            $OUTDIR/$SUBDIR/$TOFDIR \
+            $OUTDIR/$SUBDIR/$ASLDIR \
+            $OUTDIR/$SUBDIR/$SWIDIR \
+            $OUTDIR/$SUBDIR/$MISCDIR;
+
+    #copy dataset into the corresponding directory
+    for f in $SUBPATH/*.{nii,nii.gz,json,bval,bvec} ; do
+    # for f in $SUBPATH/*.* ; do
+        #extract basename
+        u=`basename $f`
+        # fix invalid characters
+        d=`echo ${u} | sed -e 's/[^A-Za-z0-9._-]/_/g'`
+        #printf "$f\n"
+        #printf "$d\n\n"
+        case "${d}" in
+            *MEmprage*_e[1-9]*)
+                printf "Copy echo data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$MISCDIR/$d
+                ;;
+            *bold*)
+                printf "Copy func data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$FUNCDIR/$d
+                ;;
+            *fMRI*) #GE specific
+                printf "Copy func data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$FUNCDIR/$d
+                ;;
+            *t1*)
+                printf "Copy anat data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$ANATDIR/$d
+                ;;
+            *mask*)
+                printf "Copy mask data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$ANATDIR/$d
+                ;;
+            *T1*) #GE specific 2022-06-07
+                printf "Copy anat data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$ANATDIR/$d
+                ;;                
+            *t2*)
+                printf "Copy T2w data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$MISCDIR/$d
+                ;;
+            *T2*)
+                printf "Copy T2w data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$MISCDIR/$d
+                ;;
+            *MSHELL*)
+                printf "Copy diff data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$DWIDIR/$d
+                ;;
+            *mshell*)
+                printf "Copy diff data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$DWIDIR/$d
+                ;;                
+            *distcorr*)
+                printf "Copy sdc data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$SDCDIR/$d
+                ;;
+            *field_mapping*)
+                printf "Copy sdc data\t${d}\n"
+                cp $f $OUTDIR/$SUBDIR/$SDCDIR/$d
+                ;;
+        esac
+    done
+done
+
+mkdir -p -m 777 $OUTDIR/$QCDIR
+
+duration=$SECONDS
+printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."
+rm -rf dcmlist.txt
+# Create filelist for functional processing
+ls -d1 ${OUTDIR}/sub-*/${FUNCDIR}/*.nii.gz > ${LOGDIR}/lnifmri_prep_ep2dlist.txt
+# Create filelist for anatomical processing
+ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*.nii.gz | grep -v 'mask' > ${LOGDIR}/lnifmri_prep_anatlist.txt
+# ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*mp2rage*.nii.gz > ${LOGDIR}/lnifmri_prep_mp2ragelist.txt
+# Create filelist for diffusion processing
+# ls -d1 ${OUTDIR}/sub-*/${DWIDIR}/*.nii.gz > ${OUTDIR}/lnifmri_prep_dwilist.txt
+# Create filelist for VBM analysis
+ls -d1 ${OUTDIR}/sub-*/${ANATDIR}/*.nii.gz  | grep -v 'mask' > ${OUTDIR}/filelist_VBM_template.txt
+
+NextStep

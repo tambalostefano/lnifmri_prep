@@ -1,0 +1,115 @@
+#!/bin/bash
+#
+# LNiF MRI Lab
+#
+# CHeck if listed files/directories exists
+#
+# stefano.tambalo@unitn.it - 20221221
+#
+########################################################################
+
+# Header
+########################################################################
+
+export LC_ALL=C
+
+shopt -s extglob
+
+Usage() {
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Utilities\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "\tRequires:\n\t\t--\n"
+    printf "\tUsage:\n\t\tlnifmri_util_validpath -i input\n"
+    printf "\tArgs:\n"
+    printf "\t\t-i:\ttext file (.txt) or NIFTI 4D image;\n\n"
+    printf "\te.g.:\tlnifmri_util_validpath -i my_nifti_image.nii.gz\n"
+    printf "\t\tlnifmri_util_validpath -i my_filelist.txt"
+    printf "\n\n(c) stefano.tambalo@unitn.it, 2022.\n"
+    printf "***************************************************\n\n"
+    exit 1
+}
+
+
+Start() {
+    stamp=`date +%Y%m%d_%H%M%S`	
+    printf "\n**************************************************************\n"
+    printf "LNiF MRI Lab Utilities\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "Validation started [ %s ]\n\n" "${stamp}"
+}
+
+Stop() {
+    printf "\nComplete. Exec. Time: ${exectime}\n"
+	printf "$vsub / $nsub valid paths are listed in: %s\n" "${outfile}"
+    printf "\n(c) stefano.tambalo@unitn.it, 2022.\n"
+    printf "**************************************************************\n\n"
+    exit 1
+}
+
+# Parse and validate input
+[ "$1" = "" ] && Usage
+
+#Get input filename
+while getopts 'i:' input; do
+    case "$input" in
+        i)
+			arg="${OPTARG}"
+			case "${arg}" in
+	        	*.nii.gz)
+					list[0]=${arg}
+					# echo ${list[@]}
+					;;
+		        
+	        	*.nii)
+					list[0]=${arg}
+					# echo ${list[@]}			
+					;;
+		        
+	        	*.txt)
+					readarray -t list < "${arg}"
+					# echo ${list[@]}
+					;;
+				*)
+					Usage
+					;;
+			esac
+			;;
+        *)
+			Usage
+			;;
+    esac
+done
+
+stamp=`date +%Y%m%d_%H%M%S`
+
+logfile=lnifmri_util_validpath_log.txt
+outfile=lnifmri_util_validpath.txt
+
+SECONDS=0
+exectime=0
+
+# Body
+########################################################################
+
+#clear
+Start |& tee -a ${logfile}
+
+nsub=$(wc -l < ${arg})
+printf "\nProcessing n=%s items listed in input file\n\n" "${nsub}" |& tee -a ${logfile}
+ 
+vsub=0
+
+for i in "${list[@]}" ; do
+    if [[ -f "$i" ]] || [[ -d "$i" ]];
+    then
+        printf "%s\n" ${i} |& tee -a ${outfile}
+        ((vsub++))
+    else
+        printf "\n%s not found.\n" "${i}" |& tee -a ${logfile}
+    fi
+done
+
+duration=$SECONDS
+printf -v exectime "$(($duration / 60))m:$(($duration % 60))s"
+Stop  |& tee -a ${logfile}

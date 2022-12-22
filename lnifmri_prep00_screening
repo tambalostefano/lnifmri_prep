@@ -1,0 +1,220 @@
+#!/bin/bash
+#
+# LNiF MRI Lab Pipeline for preprocessing of
+# structural and functional MRI dataset
+# stefano.tambalo@unitn.it - 20200310
+#
+# Screening of JSON files from functional EPI timeseries to list
+# -   TR
+# -   TE
+# -   BW
+# -   EchoSpacing
+# -   Slice Num
+# -   Fat Sat
+# -   MB factor
+# -   Volumes
+# to identify possible inconsistencies
+#
+########################################################################
+export LC_ALL=C
+
+shopt -s extglob
+Usage() {
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "\tFSLDIR not set!\n\n"
+    printf "\tRequires:\n\t\tFSL (https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL)\n"
+    printf "\n\n(c) stefano.tambalo@unitn.it, 2020.\n"
+    printf "***************************************************\n\n"
+    exit 1
+}
+
+Start() {
+    stamp=`date +%Y%m%d_%H%M%S`
+    printf "\n**************************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "Consistency Check of Acq. Parameters\n\n"
+}
+
+Prompt() {
+    printf "\n**************************************************************\n"
+    printf "To exclude one or more subjects from the workflow,\n"
+    printf "type their code separated by [space] and hit [ENTER], e.g.:\n\n"
+    printf "Skip subject(s): 01 05\n\n"
+    printf "Or simply hit [ENTER] to process the entire list."
+    printf "\n**************************************************************\n\n"
+}
+
+
+[ "$FSLDIR" = "" ] && Usage
+exectime=0
+SECONDS=0
+QCDIR=`pwd`/qc
+LOGDIR=`pwd`/logs
+pnglist=""
+
+Start
+
+# Define list of key parameters to be compared
+declare fields=("Manufacturer" \
+                "MagneticFieldStrength" \
+                "RepetitionTime" \
+                "EchoTime" \
+                "PixelBandwidth" \
+                "DerivedVendorReportedEchoSpacing" \
+                "ReceiveCoilActiveElements" \
+                "MultibandAccelerationFactor"\
+                "PhaseEncodingAxis"\
+                "PhaseEncodingDirection");
+declare pars
+declare numpars
+
+printf "Parsing acquisition parameters\n"    
+
+subcount=0
+for epiimg in `cat ${LOGDIR}/lnifmri_prep_ep2dlist.txt`; do
+# for SUBDIR in sub-*[0-9] ; do
+    # for epiimg in `$FSLDIR/bin/imglob $SUBDIR/func/*ep2d_bold*[0-9]_+([0-9]).nii.gz` ; do
+        epiname=$($FSLDIR/bin/remove_ext ${epiimg})
+        scanname=$(basename ${epiimg})
+        
+        readarray -d / -t fileparts <<< "${epiimg}"
+        nid=$((${#fileparts[@]}-1))
+        sid=$((${#fileparts[@]}-3))
+        nameID=$(echo ${fileparts[${nid}]})
+        subID=$(echo ${fileparts[${sid}]})
+        
+        # printf "\tReformat JSON file\n"
+        # cat ${epiname}.json | tr -d '\n' > ${epiname}_temp1.json
+        # sed 's/,\t"/,\n"/g' ${epiname}_temp1.json > ${epiname}_temp2.json
+        # cat ${epiname}_temp2.json | tr -d '\t' > ${epiname}_parameters.json
+
+        printf "\tDataset: ${scanname}\n"
+
+        for f in "${!fields[@]}" ; do
+            # parsing with awk (to retain MacOS compatibility)
+            pars[$f]=$(awk '$1 ~ /"'"${fields[$f]}"'"/ {print $2}' ${epiname}.json | tr -d ',')
+            # compute hash code of read parameter
+            # to compare both numbers and strings
+            numpars[$f]=$(cksum <<< ${pars[$f]} | cut -f 1 -d ' ')
+            printf "${pars[$f]}\t" >> ${QCDIR}/qc_screen_rawfunc.txt
+            printf "${numpars[$f]}\t" >> ${QCDIR}/qc_screen_func.txt     
+        done
+        # Acq. Params
+        printf "\n" >> ${QCDIR}/qc_screen_rawfunc.txt
+        # Hash codes
+        printf "\n" >> ${QCDIR}/qc_screen_func.txt
+        # GLM design
+        printf "1\n" >> ${QCDIR}/qc_screen_design.txt
+    # done #${epiname}
+
+    printf "[%02d]\t\n" "$(( ++subcount ))" >> ${QCDIR}/qc_screen_code.txt
+    printf "%s\t\n" "${subID}" >> ${QCDIR}/qc_screen_subs.txt
+    unset fileparts
+done #for .sub
+
+cat ${QCDIR}/qc_screen_subs.txt | sort | uniq > ${QCDIR}/qc_screen_subs_uniq.txt
+
+paste -d " " ${QCDIR}/qc_screen_code.txt ${QCDIR}/qc_screen_subs.txt > ${QCDIR}/qc_screen_rows.txt
+
+printf "\n"
+#Do not run GLM if subject < 3
+if [ "$subcount" -gt "2" ]; then
+    $FSLDIR/bin/fsl_glm -i ${QCDIR}/qc_screen_func.txt \
+                        -d ${QCDIR}/qc_screen_design.txt \
+                        -o ${QCDIR}/qc_screen_out.txt \
+                        --out_res=${QCDIR}/qc_screen_res.txt
+
+    # Normalize values of residuals
+    awk '{ if (NR==1) { n = split($0, a, " "); } for (i=1; i<n; i++) { printf("%.3f\t", ($i/a[i])); } printf("%.3f\n", ($n/a[n])); }' ${QCDIR}/qc_screen_res.txt > ${QCDIR}/qc_screen_resnorm.txt
+    #Replace NaN values
+    sed -i 's/-nan/1/g' ${QCDIR}/qc_screen_resnorm.txt 
+
+    for p in "${!fields[@]}"; do
+    #Plot parameters traces
+        l=$((${p}+1))
+        title=${fields[$p]}
+        entry=$(echo "${title}" | tr -dc '[:upper:]')
+        printf -v plot "${QCDIR}/qc_screen_${fields[p]}.png"
+        $FSLDIR/bin/fsl_tsplot  -i ${QCDIR}/qc_screen_resnorm.txt \
+                           	    -t ${title} -x " " \
+                           	    -w 640 -h 144 \
+                                --start=${l} --finish=${l} \
+                           	    --ymin=-3 --ymax=3 \
+                           	    -o ${plot};
+        
+        [[ -z "$pnglist" ]] && pnglist="${pnglist} ${plot}" || pnglist="${pnglist} - ${plot}"
+    done
+    $FSLDIR/bin/pngappend ${pnglist} ${QCDIR}/lnifmri_prep_qc_acqpars.png
+else
+    printf "Too few subjects. Nothing to plot.\n\n"
+fi
+
+#Format table headers
+printf "Code\tSub-ID\t" >> ${QCDIR}/qc_screen_headers.txt
+printf "\nKey to param headers:\n" >> ${QCDIR}/qc_screen_keyheaders.txt    
+for f in "${fields[@]}" ; do
+    hdr=$(echo "${f}" | tr -dc '[:upper:]')
+    printf "${hdr}\t" >> ${QCDIR}/qc_screen_headers.txt
+    printf "%s\t%s\n" "${hdr}" "${f}" >> ${QCDIR}/qc_screen_keyheaders.txt    
+done
+printf "\n" >> ${QCDIR}/qc_screen_headers.txt
+#Compose data table
+paste -d " " ${QCDIR}/qc_screen_rows.txt ${QCDIR}/qc_screen_rawfunc.txt > ${QCDIR}/qc_screen_table.txt
+#Print table headers
+cat ${QCDIR}/qc_screen_headers.txt ${QCDIR}/qc_screen_table.txt | sed 's/\t/,|,/g' | column -s ',' -t > ${QCDIR}/qc_screen_formattedtable.txt
+paste -d " " ${QCDIR}/qc_screen_code.txt ${LOGDIR}/lnifmri_prep_ep2dlist.txt > ${QCDIR}/qc_screen_scans.txt
+
+while true; do
+    # clear
+    # Start
+    
+    #Print legend and formatted data table
+    cat ${QCDIR}/qc_screen_keyheaders.txt | sed 's/\t/,|,/g' | column -s ',' -t
+    printf "\n"
+    cat ${QCDIR}/qc_screen_formattedtable.txt | awk 'NR<2 {print $0;next} {print $0 | "sort"}'
+    
+    Prompt
+    # Read input string
+    read -p "Skip subject(s): " list
+    if [ -z "$list" ] ;
+        then check="NONE"
+    else
+        # Print input list
+        for L in ${list}; do
+            printf "[${L}]\n" >> ${QCDIR}/qc_screen_purgelist.txt
+        done
+        # Validate input list - show only matching entries
+        check=$(awk 'NR == FNR{ a[$1] = 1; next } a[$1]' ${QCDIR}/qc_screen_purgelist.txt ${QCDIR}/qc_screen_scans.txt)
+        [[ -z "$check" ]] && check="NONE"
+    fi
+    printf "The following SCANS will be EXCLUDED from the analysis:\n\n%s\n\n" "$check"
+    printf "Continue? (y/n): "
+    # Read user input
+    read answer
+    while true; do
+        case "$answer" in
+            [yY]* )
+                # Prepare input list for other scripts
+                printf "\nPopulating input list..."
+                printf "%s" "${check}" > ${QCDIR}/qc_screen_purgedscans.txt
+                printf "\nExcluded scans (code): %s\n" "${check}" >> ${LOGDIR}/lnifmri_prep00_inputlog.txt
+                awk 'NR == FNR{ a[$1] = 1; next } !a[$1] {print $2}' ${QCDIR}/qc_screen_purgedscans.txt ${QCDIR}/qc_screen_scans.txt > ${LOGDIR}/lnifmri_prep_inputlist.txt
+                printf "done.\nStarting workflow...\n\n"
+                exit 1;;
+
+            [nN]* )
+                # Ask for a new list
+                rm -rf ${QCDIR}/qc_screen_purgelist.txt
+                break;;
+
+            * )
+                # Ask for a valid answer
+                printf "\nPlease answer either “y” or “n”: "
+                read answer
+                ;;
+        esac
+    done
+done

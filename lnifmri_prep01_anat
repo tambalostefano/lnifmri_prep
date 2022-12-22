@@ -1,0 +1,237 @@
+#!/bin/bash
+#
+# LNiF MRI Lab Pipeline for preprocessing of
+# structural and functional MRI dataset
+# stefano.tambalo@unitn.it - 20200310
+#
+# Preprocess structural data, e.g. T1 MPRAGE, MEMPRAGE, T2, ecc.
+#
+########################################################################
+export LC_ALL=C
+
+shopt -s extglob
+Usage() {
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "\tFSLDIR not set!\n\n"
+    printf "\tRequires:\n\t\tFSL (https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL)\n"
+    printf "\n\n(c) stefano.tambalo@unitn.it, 2020.\n"
+    printf "***************************************************\n\n"
+    exit 1
+}
+
+Start() {
+    stamp=`date +%Y%m%d_%H%M%S`
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "Process structural data\n"    
+
+}
+
+NextStep() {
+    printf "\n***************************************************\n"
+    printf "LNiF MRI Lab Preprocessing Pipeline\n"
+    printf "CIMeC - Center for Mind/Brain Science\n\n"
+    printf "Complete. Exec. Time: ${exectime}\nNow run lnifmri_prep02_preproc"
+    printf "\n\n***************************************************\n\n"
+    exit 1
+}
+
+[ "$FSLDIR" = "" ] && Usage
+exectime=0
+SECONDS=0
+LOGDIR=`pwd`/logs
+stamp=`date +'%T'`
+cursubID="none"
+
+Start
+#Load T1w images
+for anatimg in `cat ${LOGDIR}/lnifmri_prep_anatlist.txt`; do
+    filename=`basename ${anatimg}`
+    anatpath=`dirname ${anatimg}`
+    anatname=`$FSLDIR/bin/remove_ext $anatimg`
+    readarray -d / -t fileparts <<< "${anatimg}"
+    nid=$((${#fileparts[@]}-1))
+    sid=$((${#fileparts[@]}-3))
+    nameID=$(echo ${fileparts[${nid}]})
+    subID=$(echo ${fileparts[${sid}]})
+    std=$FSLDIR/data/standard/MNI152_T1_2mm.nii.gz
+
+    # Check to restart the ses-XX counter
+    if [[ "${cursubID}" != "${subID}" ]]; then
+        subcount=0
+        cursubID=${subID}
+    fi
+    printf -v sesID "ses-%02d" "$(( ++subcount ))"
+
+    # Bypass robustfov
+    # $FSLDIR/bin/robustfov -i ${anatimg} -r ${anatname}_robustfov
+    $FSLDIR/bin/imcp ${anatimg} ${anatname}_robustfov
+
+##########################################################################
+# 20220926 - stefano.tambalo@unitn.it
+#
+# Updated resampling method to MNI 2mm
+#
+# Previously was a fslmaths -subsamp2, but this caused problems with
+# extremely high FOV size (> 256)
+#
+# Resample struc to speed up processing time
+
+MTXa1=`$FSLDIR/bin/fslval ${anatname}_robustfov dim1`
+MTXa2=`$FSLDIR/bin/fslval ${anatname}_robustfov dim2`
+MTXa3=`$FSLDIR/bin/fslval ${anatname}_robustfov dim3`
+MMa1=`$FSLDIR/bin/fslval ${anatname}_robustfov pixdim1`
+MMa2=`$FSLDIR/bin/fslval ${anatname}_robustfov pixdim2`
+MMa3=`$FSLDIR/bin/fslval ${anatname}_robustfov pixdim3`
+
+MTXr1=`$FSLDIR/bin/fslval ${std} dim1`
+MTXr2=`$FSLDIR/bin/fslval ${std} dim2`
+MTXr3=`$FSLDIR/bin/fslval ${std} dim3`
+MMr1=`$FSLDIR/bin/fslval ${std} pixdim1`
+MMr2=`$FSLDIR/bin/fslval ${std} pixdim2`
+MMr3=`$FSLDIR/bin/fslval ${std} pixdim3 `
+
+# FOV of Volume in mm (SUBJECT)
+FOVa1=`echo "val=${MTXa1}*${MMa1};val" | bc` 
+FOVa2=`echo "val=${MTXa2}*${MMa2};val" | bc` 
+FOVa3=`echo "val=${MTXa3}*${MMa3};val" | bc`
+# Center of Volume in mm (SUBJECT)
+COVa1=`echo "val=${FOVa1};val/=2;val" | bc` 
+COVa2=`echo "val=${FOVa2};val/=2;val" | bc` 
+COVa3=`echo "val=${FOVa3};val/=2;val" | bc`
+
+# FOV of Volume in mm (REFERENCE)
+FOVr1=`echo "val=${MTXr1}*${MMr1};val" | bc` 
+FOVr2=`echo "val=${MTXr2}*${MMr2};val" | bc` 
+FOVr3=`echo "val=${MTXr3}*${MMr3};val" | bc` 
+
+# Adjust translation to account for big FOV
+# see: https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FLIRT/FAQ
+deltaCOVt1=`echo "val=${FOVr1}-${FOVa1};val/=2;val" | bc` 
+deltaCOVt2=`echo "val=${FOVr2}-${FOVa2};val/=2;val" | bc` 
+deltaCOVt3=`echo "val=${FOVr3}-${FOVa3};val/=2;val" | bc`
+
+# Write image FOV
+########################################################
+MANUF=$(awk '$1 ~ /"Manufacturer"/ {print $2}' ${anatname}.json | tr -d ',')
+
+cat <<-EOC > ${anatname}_COVa.csv
+Manufacturer,${MANUF}
+Filename,${filename}
+dim1,${MTXa1}
+dim2,${MTXa2}
+dim3,${MTXa3}
+pixdim1(mm),${MMa1}
+pixdim2(mm),${MMa2}
+pixdim3(mm),${MMa3}
+fov1(mm),${FOVa1}
+fov2(mm),${FOVa2}
+fov3(mm),${FOVa3}
+cov1(mm),${COVa1}
+cov2(mm),${COVa2}
+cov3(mm),${COVa3}
+EOC
+########################################################
+
+# Write translation matrix
+########################################################
+cat <<-EOM > ${anatname}_resample.mat
+1 0 0 ${deltaCOVt1}
+0 1 0 ${deltaCOVt2}
+0 0 1 ${deltaCOVt3}
+0 0 0 1
+EOM
+########################################################
+
+printf "\n\tResampling\n\t${anatname}_robustfov to\n\t${std}\n"
+$FSLDIR/bin/flirt   -in ${anatname}_robustfov \
+                    -applyxfm -init ${anatname}_resample.mat \
+                    -out ${anatname}_lores \
+                    -paddingsize 0 \
+                    -interp trilinear \
+                    -ref ${std};
+
+# 20220926 - stefano.tambalo@unitn.it
+##########################################################################
+
+    # Check if a lesion mask exists, in that case include it in the pipeline
+    mask=`ls -d1 ${anatpath}/*mask*`
+
+    if [ ! -z "${mask}" ]
+    then #compgen -G "${anatpath}/*mask*" > /dev/null; then #this is BASH-only. Needs to be fixed with some portable alternative.
+        printf "\n\tOptional mask found in: ${anatpath}\n"
+        
+        printf "\n\tResampling\n\t${mask} to\n\t${std}\n"
+        $FSLDIR/bin/flirt   -in ${mask} \
+                            -applyxfm -init ${anatname}_resample.mat \
+                            -out ${anatname}_lesionmask \
+                            -paddingsize 0 \
+                            -interp nearestneighbour \
+                            -ref ${std};
+
+        #Binarize and invert to weight cost function (0=ignore, 1=keep)
+        $FSLDIR/bin/fslmaths ${anatname}_lesionmask -bin ${anatname}_lesionmask
+        $FSLDIR/bin/fslmaths ${anatname}_lesionmask -binv ${anatname}_lesionmaskinv
+
+          printf "\n\tLesion mask is available: \n\t\t${anatname}_lesionmask\n"
+
+    else
+        printf "\n\tNo valid mask found in: ${anatpath}\n\tWill create a dummy one."
+        $FSLDIR/bin/fslmaths ${anatname}_lores -mul 0 ${anatname}_lesionmask
+    fi
+	
+    type="T1";
+    #Account for multiple strucural images: sub-XX_ses_YY
+		# printf -v LABEL "${subID}_ses-%02d_${type}w" "$(( ++counter ))"
+    printf -v LABEL "${subID}_${sesID}_${type}w"
+
+	printf "\n\tProcessing ${type}w: ${subID} - ${nameID}\n\tStored in: ${LABEL}\n\n"        
+	#Call customized version of fsl_anat script (see online FSL reference for detailed description of output)
+    $LNIFMRIDIR/lnifmri_util_anat01 ./${subID}/${LABEL} ${anatname}_lores ${anatname}_lesionmask
+
+    #Prepare WM mask
+    $FSLDIR/bin/fslmaths    ./${subID}/${LABEL}.anat/${type}_fast_pve_2.nii.gz \
+                            -thr 0.33 -bin \
+                            ./${subID}/${LABEL}.anat/${type}_wmedge.nii.gz;
+    # warp into MNI space
+    $FSLDIR/bin/applywarp   -i ./${subID}/${LABEL}.anat/${type}_wmedge.nii.gz \
+                            -w ./${subID}/${LABEL}.anat/T1_to_MNI_nonlin_field \
+                            --interp=nn \
+                            -r $FSLDIR/data/standard/MNI152_T1_2mm \
+                            -o ./${subID}/${LABEL}.anat/${type}_wmedge_to_MNI_nonlin.nii.gz;                            
+    
+    #Prepare CSF msk            
+    $FSLDIR/bin/fslmaths    ./${subID}/${LABEL}.anat/${type}_fast_pve_0.nii.gz \
+                            -thr 0.33 -bin \
+                            ./${subID}/${LABEL}.anat/${type}_csfedge.nii.gz;
+    # warp into MNI space
+    $FSLDIR/bin/applywarp   -i ./${subID}/${LABEL}.anat/${type}_csfedge.nii.gz \
+                            -w ./${subID}/${LABEL}.anat/T1_to_MNI_nonlin_field \
+                            --interp=nn \
+                            -r $FSLDIR/data/standard/MNI152_T1_2mm \
+                            -o ./${subID}/${LABEL}.anat/${type}_csfedge_to_MNI_nonlin.nii.gz;                             
+
+    #Prepare GM mask
+    $FSLDIR/bin/fslmaths    ./${subID}/${LABEL}.anat/${type}_fast_pve_1.nii.gz \
+                            -thr 0.33 -bin \
+                            ./${subID}/${LABEL}.anat/${type}_gmedge.nii.gz;
+    # warp into MNI space
+    $FSLDIR/bin/applywarp   -i ./${subID}/${LABEL}.anat/${type}_gmedge.nii.gz \
+                            -w ./${subID}/${LABEL}.anat/T1_to_MNI_nonlin_field \
+                            --interp=nn \
+                            -r $FSLDIR/data/standard/MNI152_T1_2mm \
+                            -o ./${subID}/${LABEL}.anat/${type}_gmedge_to_MNI_nonlin.nii.gz;                             
+
+done #for .sub
+
+duration=$SECONDS
+printf -v exectime "$(($duration / 60))m:$(($duration % 60))s."
+stamp=`date +%Y%m%d_%H%M%S`
+printf "LNiF MRI Lab Preprocessing Pipeline\nDo not remove this file!\nCreated: ${stamp}" > ${LOGDIR}/lnifmri_prep01_greenlight.txt
+ls -d1 `pwd`/sub-*/*T1w.anat > ${LOGDIR}/lnifmri_prep_t1anatlist.txt
+sleep 2
+
+NextStep
